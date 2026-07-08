@@ -302,25 +302,26 @@
   <div class="mermaid">
 sequenceDiagram
     autonumber
-    participant Sched as TAS Schedule (NEW, per-candidate)
+    participant Sched as TAS Schedule
     participant TAS
     participant CL
     participant DAS
 
+    Note over Sched,TAS: new per-candidate schedule
     Note over Sched,TAS: candidate still in one of ARRIVED_AT_SITE / INSTALLATION_IN_PROGRESS_PRE_FEE / FEE_COLLECTION_PENDING at ETA
     Sched->>TAS: fire RT check for execution_candidate_id
     TAS->>TAS: verify current_state is still in Action States set
-    TAS->>CL: INSTALLATION_FAILED equivalent, failure_reason=TIMEOUT_ARRIVED_AT_SITE (NEW reason code)
-    Note over TAS,CL: same shape as today's CSP-self-reported INSTALLATION_FAILED — SYSTEM sourced, not execution-surface sourced
-    CL->>CL: T3 fires (EXISTING, unmodified) - PENDING_INSTALL to REQUESTED
-    CL->>DAS: ClStateChanged(transitionType=T3, entryReason=RETRY) (EXISTING, unmodified)
-    DAS->>DAS: prepare_retry_state - UNASSIGNED, P51 cooldown, P195 increment (EXISTING, unmodified)
-    DAS->>DAS: re-invoke routing engine (EXISTING, unmodified)
+    TAS->>CL: INSTALLATION_FAILED equivalent, failure_reason=TIMEOUT_ARRIVED_AT_SITE, new reason code
+    Note over TAS,CL: same shape as today's CSP-self-reported INSTALLATION_FAILED - SYSTEM sourced, not execution-surface sourced
+    CL->>CL: T3 fires, existing unmodified - PENDING_INSTALL to REQUESTED
+    CL->>DAS: ClStateChanged transitionType=T3, entryReason=RETRY - existing, unmodified
+    DAS->>DAS: prepare_retry_state - UNASSIGNED, P51 cooldown, P195 increment - existing, unmodified
+    DAS->>DAS: re-invoke routing engine - existing, unmodified
     alt reroute succeeds
-      DAS->>DAS: ASSIGNED with new CSP, fresh P41 deadline computed + persisted (EXISTING)
-      DAS->>TAS: AllocationAssigned (EXISTING) - new candidate created fresh at AWAITING_SLOT_PROPOSAL
+      DAS->>DAS: ASSIGNED with new CSP, fresh P41 deadline computed and persisted - existing
+      DAS->>TAS: AllocationAssigned, existing - new candidate created fresh at AWAITING_SLOT_PROPOSAL
     else reroute fails
-      DAS->>DAS: retry_count++; AllocationHeld (P191) if under P50 cap, else AllocStateRoutingFailure (EXISTING)
+      DAS->>DAS: retry_count incremented, AllocationHeld P191 if under P50 cap, else AllocStateRoutingFailure - existing
     end
   </div>
   <div class="hint"><strong>Nothing inside CL or D&amp;A changes.</strong> The only new component is the TAS-side schedule and its trigger call into CL — everything from "CL T3 fires" onward is the exact pipeline documented in the RT implementation checklist (companion doc: <a href="https://ashish-raj-wiom.github.io/timer-scheduler-framework/">timer-scheduler-framework</a>), grounded in <code>AllocationServiceImpl.java</code> (~L107-138) and <code>InboundEventProcessingServiceImpl.java</code> in both CL (~L398-473) and D&amp;A (~L424-541).</div>
@@ -329,22 +330,23 @@ sequenceDiagram
   <div class="mermaid">
 sequenceDiagram
     autonumber
-    participant Sched as TAS Schedule (NEW, per-candidate)
+    participant Sched as TAS Schedule
     participant TAS
     participant CL
     participant DAS
 
+    Note over Sched,TAS: new per-candidate schedule
     Note over Sched,TAS: candidate still in exactly the Trigger State at ETA - no span, since the next hop has its own scheduler
     Sched->>TAS: fire RT check for execution_candidate_id
-    TAS->>TAS: verify current_state == Trigger State (singleton Action States)
-    TAS->>CL: INSTALLATION_FAILED equivalent, failure_reason=TIMEOUT_AWAITING_TECHNICIAN_ASSIGNMENT or TIMEOUT_TECHNICIAN_ASSIGNED (NEW)
-    CL->>CL: T3 fires (EXISTING, unmodified) - PENDING_INSTALL to REQUESTED
-    CL->>DAS: ClStateChanged(transitionType=T3, entryReason=RETRY) (EXISTING, unmodified)
-    DAS->>DAS: prepare_retry_state, re-invoke routing engine (EXISTING, unmodified)
+    TAS->>TAS: verify current_state equals Trigger State, singleton Action States
+    TAS->>CL: INSTALLATION_FAILED equivalent, failure_reason=TIMEOUT_AWAITING_TECHNICIAN_ASSIGNMENT or TIMEOUT_TECHNICIAN_ASSIGNED, new reason code
+    CL->>CL: T3 fires, existing unmodified - PENDING_INSTALL to REQUESTED
+    CL->>DAS: ClStateChanged transitionType=T3, entryReason=RETRY - existing, unmodified
+    DAS->>DAS: prepare_retry_state, re-invoke routing engine - existing, unmodified
     alt reroute succeeds
-      DAS->>TAS: AllocationAssigned (EXISTING) - new candidate created fresh at AWAITING_SLOT_PROPOSAL
+      DAS->>TAS: AllocationAssigned, existing - new candidate created fresh at AWAITING_SLOT_PROPOSAL
     else reroute fails
-      DAS->>DAS: retry_count++; AllocationHeld (P191) if under P50 cap, else AllocStateRoutingFailure (EXISTING)
+      DAS->>DAS: retry_count incremented, AllocationHeld P191 if under P50 cap, else AllocStateRoutingFailure - existing
     end
   </div>
   <div class="hint">Same pipeline as the span scheduler above — the only difference is the membership check is against a one-element set instead of three. This is exactly why <code>Action States</code> as a field is sufficient to express both shapes without two different mechanisms.</div>
@@ -353,19 +355,21 @@ sequenceDiagram
   <div class="mermaid">
 sequenceDiagram
     autonumber
-    participant Sched as TAS Schedule (per-candidate)
+    participant Sched as TAS Schedule
     participant TAS
-    participant Outbox as TAS Outbox (EXISTING mechanism, NEW event type)
-    participant Attn as Attention pipeline (install AttentionReason - NEW)
-    participant App as CSP app task list
+    participant Outbox as TAS Outbox
+    participant Attn as Attention Pipeline
+    participant App as CSP App Task List
 
-    Note over Sched,TAS: candidate still in the Nudge Trigger State at ETA (singleton Action States)
+    Note over Sched,TAS: per-candidate schedule
+    Note over Outbox,App: outbox mechanism existing, event type and attention subscriber new
+    Note over Sched,TAS: candidate still in the Nudge Trigger State at ETA, singleton Action States
     Sched->>TAS: fire Nudge check for execution_candidate_id
-    TAS->>TAS: verify current_state == Trigger State
-    TAS->>Outbox: publish EsInstallScheduleNudgeFired (NEW event type, via EXISTING EventSender/outbox.schedule pattern)
-    Note over TAS,Outbox: transactional - same @TransactionalEventListener(BEFORE_COMMIT) convention as every other TAS domain event
-    Outbox-->>Attn: subscriber consumes event (in-process call or cross-service subscription - TBD, see Open Questions)
-    Attn->>Attn: bump latestAttentionVersion, set latestAttentionType/Reason/At (NEW install AttentionReason value per Nudge scheduler)
+    TAS->>TAS: verify current_state equals Trigger State
+    TAS->>Outbox: publish EsInstallScheduleNudgeFired, new event type, via existing EventSender / outbox.schedule pattern
+    Note over TAS,Outbox: transactional - same TransactionalEventListener BEFORE_COMMIT convention as every other TAS domain event
+    Outbox-->>Attn: subscriber consumes event, in-process call or cross-service subscription TBD, see Open Questions
+    Attn->>Attn: bump latestAttentionVersion, set latestAttentionType and Reason and At, new install AttentionReason value per Nudge scheduler
     App->>App: task list reflects updated attention signal on next read
   </div>
   <div class="hint"><strong>This cascade does not exist today in any form.</strong> Live Nudge schedulers (<code>SLOT_PROPOSAL_URGENT</code>, <code>TECHNICIAN_ASSIGNMENT_URGENT</code>, <code>HAPPY_CODE_SUBMIT_URGENT</code>) currently stop after the passive in-app reminder flag — no outbox publish, no attention-signal update. Everything from "publish <code>EsInstallScheduleNudgeFired</code>" onward is new work, grounded in the existing outbox mechanism (<code>EventSender.java</code>, <code>outbox_record</code> table) and the existing per-candidate attention fields (<code>AttentionServiceImpl.java</code>, currently wired for netbox_recovery/recharge only) — not new machinery from scratch, but a new event type and new reason-code values layered onto both.</div>
