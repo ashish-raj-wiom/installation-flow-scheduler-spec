@@ -138,7 +138,7 @@
 <main>
 
 <header class="doc">
-  <div class="eyebrow">Wiom · Change Spec · v0.8 (draft) · PM deliverable · SCHED-01</div>
+  <div class="eyebrow">Wiom · Change Spec · v0.9 (draft) · PM deliverable · SCHED-01</div>
   <h1>Per-stage scheduler framework — a common scheduling service, event-driven, for all TAS install schedulers</h1>
   <p class="lede">P74 today is one flat 72h timer anchored on CL's <code>PENDING_INSTALL</code> — a state that spans all 9 pre-arrival and 6 post-arrival TAS candidate states without distinguishing between them. It is also anchored differently than the OS specifies (see A2). This spec introduces a per-stage scheduler model — <strong>Service, Trigger State, ETA, Action States, Action, Feature Flag, Outbox Event</strong> — as the <strong>full implementation across every TAS-owned trigger state</strong>, not a single pilot. Three things changed since v0.3: <strong>(1)</strong> the scheduling engine itself is now scoped as a <strong>common capability shared across D&amp;A, CL, and TAS</strong>, not TAS-only infrastructure — today each service runs its own independently-duplicated <code>EventBridgeTaskScheduler</code>, and this spec should stop that duplication rather than add a fourth copy. <strong>(2)</strong> every scheduler fire, any Action type, must publish a domain event through the owning service's existing outbox so other services can subscribe — RT already satisfies this by construction, but Nudge and System Intervention publish nothing today. <strong>(3)</strong> a Nudge's outbox event should sit <em>alongside</em> the CSP-facing Attention model (the per-candidate signal that highlights a task in the CSP app's list) — verified as a real, TAS-owned mechanism that already fires correctly for install today (all 3 live Nudges already update it), so v0.4's original claim that this integration needed building was wrong and is corrected here; the outbox event adds cross-service observability without touching the working attention path. The RT reroute mechanism itself is still not new — P41 and P74/T3 already implement the full pipeline.</p>
   <div class="meta-row">
@@ -187,7 +187,7 @@
     <tr><td>Change title</td><td>Per-stage scheduler framework — a common scheduling service, event-driven, for all TAS install schedulers</td></tr>
     <tr><td>Owner (PM)</td><td>Ashish Raj</td></tr>
     <tr><td>Status</td><td>Draft — under active audit by PM</td></tr>
-    <tr><td>Version</td><td>v0.8 (2026-07-08)</td></tr>
+    <tr><td>Version</td><td>v0.9 (2026-07-08)</td></tr>
     <tr><td>Baseline (OS / Spec / Code)</td><td><code>connection-lifecycle-prd.yaml</code> — state machine §"state_machines" (`PENDING_INSTALL` description, T1/T2/T3 transitions), ASM-CLO-03 (P74 anchor), engineering_assumptions EA-CL-01. TAS: <code>CandidateState.java</code> (22-state enum, GAP-07 `ASSIGNED`/`DECLINED` additions). Code baseline: <code>AllocationServiceImpl.java</code> (~L107-138, P41 reroute), <code>SchedulingServiceImpl.java</code> (~L68-120, P41 fire handler), <code>InboundEventProcessingServiceImpl.java</code> in csp-connection-lifecycle-service (~L398-473, T3 handler) and in csp-demand-allocation-service (~L424-541, retry intake + reroute). <strong>New in v0.4:</strong> outbox pattern — <code>io.namastack.outbox</code> library, `outbox_record` table (auto-created by Namastack, not Flyway — see `V006__outbox_tables_owned_by_namastack.sql`), per-service `EventSender.java` (`@TransactionalEventListener(BEFORE_COMMIT)` → `outbox.schedule(event, partitionKey)`, e.g. TAS install module `.../install/infrastructure/messaging/EventSender.java:25-127`), concrete publish call site `CandidateWorkflowServiceImpl.java:342`. Attention model — per-candidate fields `latestAttentionVersion`/`Type`/`Reason`/`At`, `AttentionServiceImpl.java` (install, `.../install/application/impl/AttentionServiceImpl.java:32-64`), `AttentionReason` enum pattern (netbox_recovery only today, `AttentionReason.java:8-14`), gateway `AttentionDto.java:8-15`. Duplicated scheduling infra — 3 independent `EventBridgeTaskScheduler.java` implementations, one per service (TAS/CL/D&amp;A), plus TAS's install-only `InstallEventBridgeTaskScheduler.java` using separate IAM credentials; no shared scheduling library exists in `services/shared-libs` today.</td></tr>
   </table>
   <hr class="sect-end">
@@ -452,11 +452,13 @@ sequenceDiagram
   <span class="kw">And</span>   TAS emits the INSTALLATION_FAILED equivalent with failure_reason=TIMEOUT_ARRIVED_AT_SITE
   <span class="kw">And</span>   CL fires T3 (PENDING_INSTALL to REQUESTED) exactly as it does for TIMEOUT_P74 today
   <span class="kw">And</span>   D&amp;A reroutes per the existing pipeline (cooldown, P195, re-route, re-arm)
-  <span class="kw">And</span>   the old candidate's terminal state = CANCELLED_BY_UPSTREAM with failure_reason=TIMEOUT_ARRIVED_AT_SITE
+  <span class="kw">And</span>   the old candidate's terminal state = CANCELLED_BY_UPSTREAM with failure_reason=TIMEOUT_ARRIVED_AT_SITE,
+        failure_subreason_code=CSP_NO_SHOW (reused, not a new value)
 
   <span class="kw">Verify:</span>
     • TAS DB — install_execution_candidates WHERE execution_candidate_id = &lt;test&gt;
-        expect current_state = 'CANCELLED_BY_UPSTREAM', failure_reason = 'TIMEOUT_ARRIVED_AT_SITE'
+        expect current_state = 'CANCELLED_BY_UPSTREAM', failure_reason = 'TIMEOUT_ARRIVED_AT_SITE',
+        failure_subreason_code = 'CSP_NO_SHOW', failure_subreason_source = 'SYSTEM'
     • CL DB — connection_event_history WHERE connection_id = &lt;test&gt;
         expect one INSTALLATION_FAILED row, source_os = SYSTEM, resulting_state = 'REQUESTED'
     • D&amp;A DB — connection_allocations WHERE connection_id = &lt;test&gt;
@@ -505,6 +507,8 @@ sequenceDiagram
 
   <span class="kw">Verify:</span>
     • Same shape as LOGIC-1's verify block, with failure_reason = 'TIMEOUT_AWAITING_TECHNICIAN_ASSIGNMENT'
+        and failure_subreason_code = 'CSP_NO_SHOW' (reused — same value as the other two RT triggers,
+        distinguishability comes from failure_reason, not from a per-trigger subreason)
     • Negative — if the candidate advances to TECHNICIAN_ASSIGNED before T + ETA, this scheduler
       must NOT fire (singleton, unlike ARRIVED_AT_SITE's span) — the newly-armed TECHNICIAN_ASSIGNED
       RT schedule takes over coverage instead</pre></div>
@@ -520,6 +524,7 @@ sequenceDiagram
 
   <span class="kw">Verify:</span>
     • Same shape as LOGIC-1's verify block, with failure_reason = 'TIMEOUT_TECHNICIAN_ASSIGNED'
+        and failure_subreason_code = 'CSP_NO_SHOW' (reused, same as the other two RT triggers)
     • Negative — if the candidate advances to ARRIVED_AT_SITE before T + ETA, this scheduler
       must NOT fire — coverage passes to the ARRIVED_AT_SITE RT schedule instead</pre></div>
 
@@ -537,7 +542,10 @@ sequenceDiagram
     • Toggling the flag from false to true does NOT retroactively arm schedules for candidates that
       already entered the state while it was off — flag state is read at entry, not polled continuously
     • Negative — confirm this is true independently for each of the three new RT flags in this spec;
-      one flag being off must not affect any other scheduler's behavior</pre></div>
+      one flag being off must not affect any other scheduler's behavior
+    • Negative — D&amp;A's P41 (ASSIGNED) has no equivalent flag in this spec and is confirmed out of
+      scope (see A5/WR/A8/Out-of-Scope); do not write test coverage expecting a
+      SCHED_ASSIGNED_RT_ENABLED flag to exist or be toggleable as part of this spec's rollout</pre></div>
 
   <div class="gherkin"><pre><span class="kw">LOGIC-7:</span> Nudge fires - attention update already live (regression check), Outbox Event is the only new behavior
 
@@ -638,6 +646,7 @@ sequenceDiagram
   <table>
     <thead><tr><th>Version</th><th>Date</th><th>Author</th><th>Section(s)</th><th>Change &amp; rationale</th><th>Approver</th></tr></thead>
     <tbody>
+      <tr><td>v0.9</td><td>2026-07-08</td><td>Ashish Raj</td><td>B5 Gherkin (LOGIC-1, 4, 5, 6)</td><td>Caught a gap while auditing acceptance-criteria completeness: the v0.8 <code>failure_subreason_code</code> decision (reuse <code>CSP_NO_SHOW</code>) had been resolved in prose but not actually asserted in any Verify block. Added <code>failure_subreason_code = 'CSP_NO_SHOW'</code> and <code>failure_subreason_source = 'SYSTEM'</code> checks to LOGIC-1/4/5's Verify blocks (LOGIC-2 inherits via "same as LOGIC-1"). Added a negative check to LOGIC-6 clarifying that D&amp;A's P41 has no equivalent flag in this spec and no test coverage should assume one — prevents QA from treating the out-of-scope decision as an oversight during test planning.</td><td>Pending</td></tr>
       <tr><td>v0.8</td><td>2026-07-08</td><td>Ashish Raj</td><td>A5, WF, WR, A8, B5, Quick Check, Out of Scope, Completeness checklist</td><td>Three PM decisions resolved, per explicit instruction. <strong>(1)</strong> <code>failure_subreason_code</code> for the three new RT triggers <strong>reuses the existing <code>CSP_NO_SHOW</code> value</strong> rather than three new codes — PM clarified its actual meaning is "CSP did not move the candidate forward in the funnel," which generically covers all three stalled scenarios; distinguishability is preserved by the three distinct <code>failure_reason</code> values (<code>TIMEOUT_*</code>), a separate field, so the subreason doesn't also need to be unique. Corrected a field-name mix-up along the way: A5/A8 had mislabeled the three new <code>TIMEOUT_*</code> values as <code>failure_subreason_code</code> when they are actually <code>failure_reason</code> values. <strong>(2)</strong> Retrofitting a feature flag onto D&amp;A's already-live P41 is <strong>confirmed out of scope for this version — not today, not tracked as a follow-up here</strong>. Corrected every place that implied 4 flagged RT schedulers (A5, WF table + hint, WR row 13, A8, Quick Check) down to 3; the WF table's <code>SCHED_ASSIGNED_RT_ENABLED</code> cell (which implied this flag was being built) is removed. <strong>(3)</strong> <strong>Resolved Open Questions are now removed from the B5 table entirely</strong> rather than kept with a "Resolved" marker — the decision is folded into the relevant A5/WF/WR/A8 section instead, so the Open Questions table only ever shows what's still genuinely open. Also fixed a stray Quick Check "Tier: Light" that had drifted out of sync with the header's Medium since v0.4.</td><td>Pending</td></tr>
       <tr><td>v0.7</td><td>2026-07-08</td><td>Ashish Raj</td><td>B5 Open Questions, WR row 11, Completeness checklist</td><td><strong>PM confirmation, per explicit instruction:</strong> retrofitting the Outbox Event onto the 3 already-live Nudge schedulers is <strong>confirmed in scope for this version</strong>, not a follow-up — resolving the v0.6 Open Question with a Yes rather than leaving it open. Strengthened WR row 11's status label and text to make this unmissable during implementation planning, and added a dedicated <span class="badge req">Required</span> row to the completeness checklist so it's tracked as its own deliverable rather than only mentioned in prose across A5/WR/B5.</td><td>Pending</td></tr>
       <tr><td>v0.6</td><td>2026-07-08</td><td>Ashish Raj</td><td>B5 Open Questions</td><td>Added an explicit sign-off checkpoint for retrofitting the 3 live Nudge schedulers with the new Outbox Event — previously this was only asserted as required in A5/WR/B5 without a single point where a PM confirms it's actually in-scope for this version rather than a follow-up, unlike the parallel P41-flag-retrofit question which already had that checkpoint. No code exists for this yet; this spec has had no engineering implementation started on any part.</td><td>Pending</td></tr>
