@@ -21,8 +21,8 @@
   <div class="eyebrow">Wiom · Installation Flow · Change Specs</div>
   <h1>Scheduler change specs</h1>
   <a class="card" href="./sched-01.html">
-    <div class="t">SCHED-01 — Per-stage scheduler framework · full implementation, all 7 TAS schedulers</div>
-    <div class="d">Introduces the (Service, Trigger State, ETA, Action States, Action, Feature Flag) model across every TAS-owned Trigger State — including new RT coverage at Awaiting Technician Assignment, Technician Assigned, and Arrived-at-Site — each independently toggleable.</div>
+    <div class="t">SCHED-01 — Per-stage scheduler framework · common service, event-driven, all 7 TAS schedulers</div>
+    <div class="d">The (Service, Trigger State, ETA, Action States, Action, Feature Flag, Outbox Event) model across every TAS-owned Trigger State. Scopes the scheduling engine as a capability shared across D&amp;A/CL/TAS, requires every fire to publish an outbox event, and wires Nudge into the CSP app's Attention model.</div>
     <span class="s">Draft — under audit</span>
   </a>
 </div>
