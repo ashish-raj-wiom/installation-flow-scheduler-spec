@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>SCHED-01 — Per-stage scheduler framework · pilot: Arrived-at-Site RT · Change Spec</title>
+<title>SCHED-01 — Per-stage scheduler framework · full TAS implementation · Change Spec</title>
 <style>
   :root {
     --bg: #fafaf9; --surface: #ffffff; --ink: #1a1a1a; --muted: #6b6b6b; --rule: #e5e5e2;
@@ -138,9 +138,9 @@
 <main>
 
 <header class="doc">
-  <div class="eyebrow">Wiom · Change Spec · v0.1 (draft) · PM deliverable · SCHED-01</div>
-  <h1>Per-stage scheduler framework for installation flow — pilot item: Arrived-at-Site RT</h1>
-  <p class="lede">P74 today is one flat 72h timer anchored on CL's <code>PENDING_INSTALL</code> — a state that spans all 9 pre-arrival and 6 post-arrival TAS candidate states without distinguishing between them. It is also anchored differently than the OS specifies (see A2). This spec introduces a per-stage scheduler model — <strong>Service, Trigger State, ETA, Action States, Action</strong> — and pilots it end-to-end on the first concrete gap this audit found: <code>ARRIVED_AT_SITE</code> has no RT coverage today, and a same-state-only check would leave <code>INSTALLATION_IN_PROGRESS_PRE_FEE</code> and <code>FEE_COLLECTION_PENDING</code> completely unprotected the moment the CSP takes one step forward. The RT mechanism itself is not new — P41 and P74/T3 already implement the full reroute pipeline; this spec's engineering ask is a correctly-scoped <em>trigger</em> into that existing pipeline, not new reroute machinery.</p>
+  <div class="eyebrow">Wiom · Change Spec · v0.2 (draft) · PM deliverable · SCHED-01</div>
+  <h1>Per-stage scheduler framework — full implementation of all TAS install schedulers</h1>
+  <p class="lede">P74 today is one flat 72h timer anchored on CL's <code>PENDING_INSTALL</code> — a state that spans all 9 pre-arrival and 6 post-arrival TAS candidate states without distinguishing between them. It is also anchored differently than the OS specifies (see A2). This spec introduces a per-stage scheduler model — <strong>Service, Trigger State, ETA, Action States, Action, Feature Flag</strong> — and is the <strong>full implementation across every TAS-owned trigger state</strong>, not a single pilot: seven Trigger States, each independently flagged, replacing the one blind clock with the right objective at each stage. The RT mechanism itself is not new — P41 and P74/T3 already implement the full reroute pipeline; this spec's engineering ask is correctly-scoped <em>triggers</em> into that existing pipeline plus per-scheduler kill switches, not new reroute machinery.</p>
   <div class="meta-row">
     <span><strong>Author:</strong> Ashish Raj &nbsp;·&nbsp; <strong>Reviewer:</strong> Engineering (pending) &nbsp;·&nbsp; <strong>Tier:</strong> Light</span>
   </div>
@@ -156,17 +156,17 @@
   <div class="qc-tag">7-line triage. Filled early this time — will be re-verified once B5/WR are complete.</div>
   <dl>
     <dt>What is changing?</dt>
-    <dd>Two coordinated changes. <strong>(1) A named scheduler model</strong> — every timer is now defined as <code>(Service, Trigger State, ETA, Action States, Action)</code> instead of ad hoc. <strong>Action States</strong> is the field that resolves same-state-check vs. gate-check as a single design question: size it to a singleton for Nudge/System Intervention (message must match the exact stuck state) or to a multi-state span for RT (RT doesn't care which pre-investment state the task is stuck in, only that it hasn't crossed the fee-payment line). <strong>(2) A new TAS-owned RT scheduler at <code>ARRIVED_AT_SITE</code></strong>, Action States = <code>{ARRIVED_AT_SITE, INSTALLATION_IN_PROGRESS_PRE_FEE, FEE_COLLECTION_PENDING}</code>, that triggers the <em>existing</em> <code>INSTALLATION_FAILED → T3 → ClStateChanged → reroute</code> pipeline (today only reachable via CL's P74) with a new reason code <code>TIMEOUT_ARRIVED_AT_SITE</code>. A companion Nudge scheduler (singleton Action States = <code>{ARRIVED_AT_SITE}</code>) warns the CSP before the RT window closes.</dd>
+    <dd>Three coordinated changes. <strong>(1) A named scheduler model</strong> — every timer is now defined as <code>(Service, Trigger State, ETA, Action States, Action, Feature Flag)</code> instead of ad hoc. <strong>Action States</strong> resolves same-state-check vs. gate-check as a sizing question, not a binary choice: singleton for Nudge/System Intervention, multi-state span for RT — but <em>only</em> across states that lack their own scheduler; once every state in a chain has one, singleton is correct for RT too. <strong>(2) RT enabled at two states that were previously No-RT</strong> — <code>AWAITING_TECHNICIAN_ASSIGNMENT</code> and <code>TECHNICIAN_ASSIGNED</code> each get a new RT scheduler (singleton Action States, since their neighbor state now has its own coverage), alongside <code>ARRIVED_AT_SITE</code>'s RT (multi-state span, since its neighbors don't yet have their own). <strong>(3) A feature flag per scheduler</strong> — <code>SCHED_&lt;TRIGGER_STATE&gt;_&lt;ACTION&gt;_ENABLED</code> — so any one scheduler, new or already-live, can be disabled independently without touching the others. All 7 TAS-owned Trigger States are in scope: <code>AWAITING_SLOT_PROPOSAL</code>, <code>AWAITING_CUSTOMER_SLOT_CONFIRMATION</code>, <code>AWAITING_TECHNICIAN_ASSIGNMENT</code>, <code>TECHNICIAN_ASSIGNED</code>, <code>ARRIVED_AT_SITE</code>, <code>INSTALLATION_IN_PROGRESS_POST_FEE</code>, <code>AWAITING_CUSTOMER_OTP</code>.</dd>
     <dt>What triggered it?</dt>
-    <dd>Live scheduler audit (2026-07-07) found P74 firing across candidates in <code>AWAITING_SLOT_PROPOSAL</code> through <code>ARRIVED_AT_SITE</code> indiscriminately. Checking the OS directly (<code>connection-lifecycle-prd.yaml</code>, ASM-CLO-03) found P74 is <em>specified</em> to anchor on the <code>INSTALLATION_COMPLETE</code> event, not on <code>PENDING_INSTALL</code> entry — the live code anchors at CL's T1 instead. This is a spec-vs-code deviation, not a deliberate design choice, and it's the root cause of why a same-state RT check at any single TAS state silently under-protects the journey once the candidate moves one hop forward.</dd>
+    <dd>Live scheduler audit (2026-07-07) found P74 firing across candidates in <code>AWAITING_SLOT_PROPOSAL</code> through <code>ARRIVED_AT_SITE</code> indiscriminately. Checking the OS directly (<code>connection-lifecycle-prd.yaml</code>, ASM-CLO-03) found P74 is <em>specified</em> to anchor on the <code>INSTALLATION_COMPLETE</code> event, not on <code>PENDING_INSTALL</code> entry — the live code anchors at CL's T1 instead. This is a spec-vs-code deviation, not a deliberate design choice, and it's the root cause of why a same-state RT check at any single TAS state silently under-protects the journey once the candidate moves one hop forward — which is why this spec covers every TAS trigger state at once rather than one at a time.</dd>
     <dt>Blast radius</dt>
-    <dd>TAS (new outbound trigger equivalent to <code>ES_INSTALL_REPORTED_FAILED</code>/<code>INSTALLATION_FAILED</code>, fired from a new per-candidate schedule instead of waiting on CL's P74) · CL (new reason code accepted on the existing T3 path — no new state, no new transition) · D&amp;A (zero change — the existing P41/T3 reroute pipeline is reused verbatim, see WF). No DB migration on D&amp;A or CL. TAS needs a new schedule table entry pattern (mirrors existing per-connection EventBridge schedules from BUG-02/GAP-06).</dd>
+    <dd>TAS (new outbound trigger equivalent to <code>ES_INSTALL_REPORTED_FAILED</code>/<code>INSTALLATION_FAILED</code> for each new RT scheduler, plus a new feature-flag check on every existing and new dispatch path) · CL (new reason codes accepted on the existing T3 path — no new state, no new transition) · D&amp;A (zero change — the existing P41/T3 reroute pipeline is reused verbatim for every new RT trigger, see WF). No DB migration on D&amp;A or CL. TAS needs a new schedule table entry pattern (mirrors existing per-connection EventBridge schedules from BUG-02/GAP-06) plus a flag-lookup table or config source for the feature flags.</dd>
     <dt>Reversible?</dt>
-    <dd>Yes — the new TAS-side trigger is additive; CL's existing P74 keeps running underneath as a backstop until this is proven out, then P74 can be narrowed back to its OS-specified <code>INSTALLATION_COMPLETE</code> anchor (separate follow-up item, not in this spec's scope).</dd>
+    <dd>Yes, per-scheduler — that's the entire point of the feature flag. Any single new scheduler can be switched off without affecting the other six. CL's existing P74 keeps running underneath as a backstop until each new trigger is proven out, then P74 can be narrowed back to its OS-specified <code>INSTALLATION_COMPLETE</code> anchor (separate follow-up item, not in this spec's scope).</dd>
     <dt>Money / PII / migration?</dt>
     <dd>No / No / No. Going-forward only. No existing candidate rows touched.</dd>
     <dt>OS impact / sign-off?</dt>
-    <dd><span class="badge pending">Pending</span> — see A8. Likely a CL OS clarification (new reason-code value on an existing transition, not a new transition) plus a TAS/Installation Flow OS addition (new per-candidate schedule type). No D&amp;A OS change — D&amp;A's side of the pipeline is untouched.</dd>
+    <dd><span class="badge pending">Pending</span> — see A8. Likely a CL OS clarification (new reason-code values on an existing transition, not a new transition) plus a TAS/Installation Flow OS addition (new per-candidate schedule types + flag config). No D&amp;A OS change — D&amp;A's side of the pipeline is untouched.</dd>
     <dt>Tier</dt>
     <dd>Light</dd>
   </dl>
@@ -184,10 +184,10 @@
   <div class="expected"><strong>What is expected:</strong> Title, owner, status, version, baseline.</div>
   <table>
     <tr><th style="width:28%">Field</th><th>Value</th></tr>
-    <tr><td>Change title</td><td>Per-stage scheduler framework · pilot: Arrived-at-Site RT</td></tr>
+    <tr><td>Change title</td><td>Per-stage scheduler framework — full implementation of all TAS install schedulers</td></tr>
     <tr><td>Owner (PM)</td><td>Ashish Raj</td></tr>
     <tr><td>Status</td><td>Draft — under active audit by PM</td></tr>
-    <tr><td>Version</td><td>v0.1 (2026-07-08)</td></tr>
+    <tr><td>Version</td><td>v0.2 (2026-07-08)</td></tr>
     <tr><td>Baseline (OS / Spec / Code)</td><td><code>connection-lifecycle-prd.yaml</code> — state machine §"state_machines" (`PENDING_INSTALL` description, T1/T2/T3 transitions), ASM-CLO-03 (P74 anchor), engineering_assumptions EA-CL-01. TAS: <code>CandidateState.java</code> (22-state enum, GAP-07 `ASSIGNED`/`DECLINED` additions). Code baseline: <code>AllocationServiceImpl.java</code> (~L107-138, P41 reroute), <code>SchedulingServiceImpl.java</code> (~L68-120, P41 fire handler), <code>InboundEventProcessingServiceImpl.java</code> in csp-connection-lifecycle-service (~L398-473, T3 handler) and in csp-demand-allocation-service (~L424-541, retry intake + reroute).</td></tr>
   </table>
   <hr class="sect-end">
@@ -200,7 +200,7 @@
     <tr><th style="width:30%">Question</th><th>Answer</th></tr>
     <tr><td>What's wrong with the current behaviour?</td><td>Three connected problems. <strong>(1) One clock, wrong granularity.</strong> P74 is anchored on CL's <code>PENDING_INSTALL</code>, a single bucket spanning every TAS state from <code>AWAITING_SLOT_PROPOSAL</code> through <code>AWAITING_CUSTOMER_OTP</code>. It cannot distinguish "stuck waiting on a technician" from "stuck at the customer's door" — the same 72h applies uniformly, and the same downstream action (RT) fires regardless of ground truth. <strong>(2) OS-vs-code deviation.</strong> The OS specifies P74 anchored on the <code>INSTALLATION_COMPLETE</code> event (CSP self-reports on-site work done) — a narrow window near the end of the journey. Live code anchors it at CL's T1 (<code>REQUESTED→PENDING_INSTALL</code>, i.e. CSP acceptance) instead — the very start. This is why P74 was observed firing against candidates still in early pre-arrival states in the 2026-07-07 audit. <strong>(3) Same-state RT checks silently under-protect.</strong> An RT scheduler anchored on a single state (e.g. <code>ARRIVED_AT_SITE</code> alone) goes silent the instant the candidate advances one hop — if the next state (<code>INSTALLATION_IN_PROGRESS_PRE_FEE</code>) has no scheduler of its own, the candidate is now completely unprotected for as long as it likes, with no RT and no Nudge.</td></tr>
     <tr><td>Who experiences it?</td><td><strong>CSPs:</strong> can lose a booking to RT with no advance warning (no Nudge exists on <code>ARRIVED_AT_SITE</code> today) and, before this fix, that same booking would silently escape RT coverage entirely if it inches forward from <code>ARRIVED_AT_SITE</code>. <strong>Customers:</strong> installs stall with no visible recovery mechanism in the exact window (post-arrival, pre-fee) where the CSP is on-site but not progressing. <strong>Quality/Enforcement OS:</strong> the RT-triggered <code>DeclinePattern(TIMEOUT)</code> signal never fires for this window, so a CSP who repeatedly no-shows post-arrival never accumulates a quality record for it.</td></tr>
-    <tr><td>Cost of leaving it as-is?</td><td>The gap this spec closes (Arrived-at-Site through Fee-Collection-Pending having no independent RT/Nudge coverage) is a real, currently-live blind spot — not hypothetical. Every day it's open, a stalled on-site install has no system-driven recovery path.</td></tr>
+    <tr><td>Cost of leaving it as-is?</td><td>The gaps this spec closes — no RT coverage past <code>AWAITING_TECHNICIAN_ASSIGNMENT</code>, <code>TECHNICIAN_ASSIGNED</code>, or <code>ARRIVED_AT_SITE</code>/<code>PRE_FEE</code>/<code>FEE_COLLECTION_PENDING</code> — are real, currently-live blind spots, not hypothetical. Every day they're open, a stalled candidate at any of these points has no system-driven recovery path. Rolling out all seven schedulers together, each behind its own flag, means the whole journey gets consistent coverage on day one, with the ability to pull back any single one if it misbehaves in production.</td></tr>
   </table>
   <hr class="sect-end">
 </section>
@@ -213,26 +213,44 @@
     <tbody>
       <tr>
         <td>Scheduler definition model</td>
-        <td>Ad hoc — P74/P41/reminders each defined independently, no shared vocabulary. "Same-state vs. gate-check" was an unresolved, per-timer judgment call.</td>
-        <td>Every scheduler is <code>(Service, Trigger State, ETA, Action States, Action)</code>. <code>Action States</code> is the field that resolves same-state-vs-gate-check: singleton for Nudge/System Intervention, multi-state span for RT (up to the fee-payment boundary).</td>
+        <td>Ad hoc — P74/P41/reminders each defined independently, no shared vocabulary. "Same-state vs. gate-check" was an unresolved, per-timer judgment call. No way to disable one timer without a code change.</td>
+        <td>Every scheduler is <code>(Service, Trigger State, ETA, Action States, Action, Feature Flag)</code>. <code>Action States</code> resolves same-state-vs-gate-check: singleton for Nudge/System Intervention, multi-state span for RT — but only across neighbor states that lack their own scheduler.</td>
         <td>One vocabulary for all timers going forward; the sizing rule is explicit and auditable per scheduler instead of implicit per-implementation.</td>
+      </tr>
+      <tr>
+        <td>Feature flag per scheduler</td>
+        <td>No kill switch exists for any individual timer. Disabling one today means a deploy.</td>
+        <td>Every scheduler — new or already-live — gets its own flag: <code>SCHED_&lt;TRIGGER_STATE&gt;_&lt;ACTION&gt;_ENABLED</code>. Checked at dispatch time, before the schedule is armed or the action fires. Config-driven (Parameter Store, matching the existing P-parameter pattern), not a code deploy.</td>
+        <td>Lets any one of the seven schedulers below be turned off in production independently — required before shipping this many new triggers at once.</td>
+      </tr>
+      <tr>
+        <td>New TAS-owned RT trigger, Trigger State = <code>AWAITING_TECHNICIAN_ASSIGNMENT</code></td>
+        <td>This state has a live Nudge (<code>TECHNICIAN_ASSIGNMENT_URGENT</code>) but no RT — it was on the "deliberate No-RT" list.</td>
+        <td>New per-candidate schedule armed on entry to <code>AWAITING_TECHNICIAN_ASSIGNMENT</code>. Action States = <code>{AWAITING_TECHNICIAN_ASSIGNMENT}</code> (singleton — <code>TECHNICIAN_ASSIGNED</code> now has its own RT, so no coverage gap on the next hop). New reason code <code>TIMEOUT_AWAITING_TECHNICIAN_ASSIGNMENT</code>. Feature flag <code>SCHED_AWAITING_TECHNICIAN_ASSIGNMENT_RT_ENABLED</code>.</td>
+        <td>Explicit product decision (this session) to move this state from No-RT to RT-enabled — a candidate with no technician ever assigned should be reroutable, not just nudged.</td>
+      </tr>
+      <tr>
+        <td>New TAS-owned RT trigger, Trigger State = <code>TECHNICIAN_ASSIGNED</code></td>
+        <td>Only a proposed (unbuilt) Nudge exists here. No RT — also on the "deliberate No-RT" list.</td>
+        <td>New per-candidate schedule armed on entry to <code>TECHNICIAN_ASSIGNED</code>. Action States = <code>{TECHNICIAN_ASSIGNED}</code> (singleton — <code>ARRIVED_AT_SITE</code> now has its own RT). New reason code <code>TIMEOUT_TECHNICIAN_ASSIGNED</code>. Feature flag <code>SCHED_TECHNICIAN_ASSIGNED_RT_ENABLED</code>.</td>
+        <td>Same product decision as above — a technician assigned but never traveling to site should be reroutable.</td>
       </tr>
       <tr>
         <td>New TAS-owned RT trigger, Trigger State = <code>ARRIVED_AT_SITE</code></td>
         <td>No RT scheduler exists at or after <code>ARRIVED_AT_SITE</code> independent of CL's mis-anchored P74. A candidate stuck post-arrival relies entirely on CL's blind 72h-from-acceptance clock.</td>
-        <td>New per-candidate schedule armed on entry to <code>ARRIVED_AT_SITE</code>. Action States = <code>{ARRIVED_AT_SITE, INSTALLATION_IN_PROGRESS_PRE_FEE, FEE_COLLECTION_PENDING}</code> — fires RT if the candidate is still in <em>any</em> of these three states at ETA (x hrs, TBD — see Open Questions in B5). On fire, TAS emits the equivalent of today's CSP-self-reported <code>INSTALLATION_FAILED</code>, with a new reason code <code>TIMEOUT_ARRIVED_AT_SITE</code>, into the <strong>existing, unmodified</strong> CL T3 → D&amp;A reroute pipeline.</td>
-        <td>Closes the exact gap A2 describes with the minimum new surface: reuses the entire existing reroute pipeline (see WF and the RT implementation checklist), only adds a correctly-scoped trigger.</td>
+        <td>New per-candidate schedule armed on entry to <code>ARRIVED_AT_SITE</code>. Action States = <code>{ARRIVED_AT_SITE, INSTALLATION_IN_PROGRESS_PRE_FEE, FEE_COLLECTION_PENDING}</code> — fires RT if the candidate is still in <em>any</em> of these three states at ETA (x hrs, TBD — see Open Questions in B5). New reason code <code>TIMEOUT_ARRIVED_AT_SITE</code>. Feature flag <code>SCHED_ARRIVED_AT_SITE_RT_ENABLED</code>. On fire, TAS emits the equivalent of today's CSP-self-reported <code>INSTALLATION_FAILED</code> into the <strong>existing, unmodified</strong> CL T3 → D&amp;A reroute pipeline.</td>
+        <td>Closes the exact gap A2 describes with the minimum new surface: reuses the entire existing reroute pipeline (see WF and the RT implementation checklist), only adds a correctly-scoped trigger. Span (not singleton) because its two neighbor states have no scheduler of their own.</td>
       </tr>
       <tr>
-        <td>New reason code <code>TIMEOUT_ARRIVED_AT_SITE</code></td>
+        <td>Three new reason codes: <code>TIMEOUT_AWAITING_TECHNICIAN_ASSIGNMENT</code>, <code>TIMEOUT_TECHNICIAN_ASSIGNED</code>, <code>TIMEOUT_ARRIVED_AT_SITE</code></td>
         <td>The only system-timeout reason code on this path is <code>TIMEOUT_P74</code>, which conflates every possible stuck-state into one label — impossible to tell from the audit trail which scheduler actually fired.</td>
-        <td>New, distinct <code>failure_subreason_code</code> value. <code>failure_subreason_source=SYSTEM</code>, confidence per existing convention. Recorded on the terminal candidate row and in CL's <code>connection_event_history</code> payload exactly like <code>TIMEOUT_P74</code> is today.</td>
-        <td>Preserves the audit trail's ability to distinguish which scheduler caused a given RT — required per this session's discussion on traceability (see B5, verification block).</td>
+        <td>Three new, distinct <code>failure_subreason_code</code> values, one per new RT trigger. <code>failure_subreason_source=SYSTEM</code>, confidence per existing convention. Recorded on the terminal candidate row and in CL's <code>connection_event_history</code> payload exactly like <code>TIMEOUT_P74</code> is today.</td>
+        <td>Preserves the audit trail's ability to distinguish which of the three new schedulers caused a given RT — required per this session's discussion on traceability (see B5, verification block).</td>
       </tr>
       <tr>
-        <td>New Nudge scheduler, Trigger State = <code>ARRIVED_AT_SITE</code></td>
-        <td>No warning exists before RT removes the booking.</td>
-        <td>Singleton Action States = <code>{ARRIVED_AT_SITE}</code>. Fires before the RT ETA (exact lead time TBD) to tell the CSP the booking is about to be reassigned. No state change.</td>
+        <td>New Nudge schedulers, Trigger States = <code>TECHNICIAN_ASSIGNED</code> and <code>ARRIVED_AT_SITE</code></td>
+        <td><code>TECHNICIAN_ASSIGNED</code>'s Nudge was proposed but unbuilt; <code>ARRIVED_AT_SITE</code> had no Nudge at all — no warning exists before RT removes the booking at either.</td>
+        <td>Singleton Action States at each of their own Trigger States. Fires before the corresponding RT ETA (exact lead times TBD) to tell the CSP the booking is about to be reassigned. No state change. Feature flags <code>SCHED_TECHNICIAN_ASSIGNED_NUDGE_ENABLED</code>, <code>SCHED_ARRIVED_AT_SITE_NUDGE_ENABLED</code>.</td>
         <td>RT should never be the CSP's first signal that something is wrong — matches the pattern already live for other stages (e.g. <code>SLOT_PROPOSAL_URGENT</code>, <code>TECHNICIAN_ASSIGNMENT_URGENT</code>).</td>
       </tr>
     </tbody>
@@ -244,18 +262,24 @@
   <h2><span class="num">WF.</span> Workflow — state flow + RT cascade <span class="tier what">WHAT</span></h2>
   <div class="expected"><strong>What is expected:</strong> State-flow view of the affected TAS states, plus the RT cascade sequence, reusing the existing reroute pipeline.</div>
 
-  <h3>TAS candidate states in scope, with scheduler coverage (post-fix)</h3>
+  <h3>All 7 TAS Trigger States in scope, with scheduler coverage (post-fix)</h3>
   <table>
-    <thead><tr><th>State</th><th>Nudge</th><th>System Intervention</th><th>RT</th><th>Note</th></tr></thead>
+    <thead><tr><th>#</th><th>Trigger State</th><th>Nudge</th><th>System Intervention</th><th>RT</th><th>Feature flags</th><th>Note</th></tr></thead>
     <tbody>
-      <tr><td><code>ARRIVED_AT_SITE</code></td><td>✓ new (Trigger State)</td><td>—</td><td>✓ new (Trigger State)</td><td>Both schedulers arm on entry to this state.</td></tr>
-      <tr><td><code>INSTALLATION_IN_PROGRESS_PRE_FEE</code></td><td>—</td><td>—</td><td>✓ (Action State only — no independent Trigger State here)</td><td>Covered by the Arrived-at-Site RT span, not by its own scheduler.</td></tr>
-      <tr><td><code>FEE_COLLECTION_PENDING</code></td><td>—</td><td>—</td><td>✓ (Action State only)</td><td>Last state before the fee-payment / investment-lock-in boundary. RT is not legal beyond this point.</td></tr>
-      <tr><td><code>INSTALLATION_IN_PROGRESS_POST_FEE</code></td><td>(separate item, not in this spec)</td><td>—</td><td>✗ never</td><td>Fee paid — RT invalidity boundary. Out of scope for SCHED-01.</td></tr>
+      <tr><td>1</td><td><code>AWAITING_SLOT_PROPOSAL</code></td><td>✓ live (<code>SLOT_PROPOSAL_URGENT</code>)</td><td>—</td><td>✓ live (D&amp;A P41, singleton Action States = <code>{ASSIGNED}</code>)</td><td><code>SCHED_AWAITING_SLOT_PROPOSAL_NUDGE_ENABLED</code>, <code>SCHED_ASSIGNED_RT_ENABLED</code></td><td>Already-live schedulers get flags too, for symmetry and independent kill-switch coverage.</td></tr>
+      <tr><td>2</td><td><code>AWAITING_CUSTOMER_SLOT_CONFIRMATION</code></td><td>—</td><td>Proposed (IVR-equivalent call to customer, ETA TBD)</td><td>✗ deliberate No-RT</td><td><code>SCHED_AWAITING_CUSTOMER_SLOT_CONFIRMATION_SI_ENABLED</code></td><td>Customer is the bottleneck here, not the CSP — RT would not fix anything. System Intervention targets the actual blocker.</td></tr>
+      <tr><td>3</td><td><code>AWAITING_TECHNICIAN_ASSIGNMENT</code></td><td>✓ live (<code>TECHNICIAN_ASSIGNMENT_URGENT</code>)</td><td>—</td><td>✓ <strong>new</strong> (singleton — <code>TECHNICIAN_ASSIGNED</code> covers the next hop)</td><td><code>SCHED_AWAITING_TECHNICIAN_ASSIGNMENT_NUDGE_ENABLED</code>, <code>SCHED_AWAITING_TECHNICIAN_ASSIGNMENT_RT_ENABLED</code></td><td>Moved off the "deliberate No-RT" list in this spec.</td></tr>
+      <tr><td>4</td><td><code>TECHNICIAN_ASSIGNED</code></td><td>✓ <strong>new</strong> (singleton)</td><td>—</td><td>✓ <strong>new</strong> (singleton — <code>ARRIVED_AT_SITE</code> covers the next hop)</td><td><code>SCHED_TECHNICIAN_ASSIGNED_NUDGE_ENABLED</code>, <code>SCHED_TECHNICIAN_ASSIGNED_RT_ENABLED</code></td><td>Moved off the "deliberate No-RT" list in this spec.</td></tr>
+      <tr><td>5</td><td><code>ARRIVED_AT_SITE</code></td><td>✓ <strong>new</strong> (singleton)</td><td>—</td><td>✓ <strong>new</strong> (span — <code>Action States = {ARRIVED_AT_SITE, INSTALLATION_IN_PROGRESS_PRE_FEE, FEE_COLLECTION_PENDING}</code>)</td><td><code>SCHED_ARRIVED_AT_SITE_NUDGE_ENABLED</code>, <code>SCHED_ARRIVED_AT_SITE_RT_ENABLED</code></td><td>Span, not singleton — the two states after it have no scheduler of their own, and this is the last Trigger State before the fee-payment boundary.</td></tr>
+      <tr><td>—</td><td><code>INSTALLATION_IN_PROGRESS_PRE_FEE</code> <em>(Action State only)</em></td><td>—</td><td>—</td><td>✓ (covered by row 5's span)</td><td>—</td><td>Not an independent Trigger State — has no scheduler armed on its own entry.</td></tr>
+      <tr><td>—</td><td><code>FEE_COLLECTION_PENDING</code> <em>(Action State only)</em></td><td>—</td><td>—</td><td>✓ (covered by row 5's span)</td><td>—</td><td>Last state before the fee-payment / investment-lock-in boundary. RT is not legal beyond this point.</td></tr>
+      <tr><td>6</td><td><code>INSTALLATION_IN_PROGRESS_POST_FEE</code></td><td>Proposed (Nudge only, ETA TBD)</td><td>—</td><td>✗ never</td><td><code>SCHED_INSTALLATION_IN_PROGRESS_POST_FEE_NUDGE_ENABLED</code></td><td>Fee paid — RT invalidity boundary per the base principle. RT is off the table for every state from here on.</td></tr>
+      <tr><td>7</td><td><code>AWAITING_CUSTOMER_OTP</code></td><td>✓ live (<code>HAPPY_CODE_SUBMIT_URGENT</code>, 4h)</td><td>—</td><td>✗ deliberate No-RT</td><td><code>SCHED_AWAITING_CUSTOMER_OTP_NUDGE_ENABLED</code></td><td>Post-investment — same boundary as row 6.</td></tr>
     </tbody>
   </table>
+  <div class="hint"><strong>Deliberate No-RT states (2 of 7 remaining, down from 5 before this spec):</strong> <code>AWAITING_CUSTOMER_SLOT_CONFIRMATION</code> (customer, not CSP, is the bottleneck) and <code>AWAITING_CUSTOMER_OTP</code> (post-investment). <code>INSTALLATION_IN_PROGRESS_POST_FEE</code> is also RT-ineligible for the same post-investment reason but is counted separately above since it sits past the fee-payment boundary rather than being a "CSP could still be rerouted but we choose not to" case.</div>
 
-  <h3>RT cascade — reuses the existing pipeline verbatim (no D&amp;A change)</h3>
+  <h3>RT cascade for the span scheduler (<code>ARRIVED_AT_SITE</code>) — reuses the existing pipeline verbatim (no D&amp;A change)</h3>
   <div class="mermaid">
 sequenceDiagram
     autonumber
@@ -282,15 +306,39 @@ sequenceDiagram
   </div>
   <div class="hint"><strong>Nothing inside CL or D&amp;A changes.</strong> The only new component is the TAS-side schedule and its trigger call into CL — everything from "CL T3 fires" onward is the exact pipeline documented in the RT implementation checklist (companion doc: <a href="https://ashish-raj-wiom.github.io/timer-scheduler-framework/">timer-scheduler-framework</a>), grounded in <code>AllocationServiceImpl.java</code> (~L107-138) and <code>InboundEventProcessingServiceImpl.java</code> in both CL (~L398-473) and D&amp;A (~L424-541).</div>
 
-  <h3>Old candidate's terminal state + audit trail (unchanged mechanics, new reason code)</h3>
+  <h3>RT cascade for the singleton schedulers (<code>AWAITING_TECHNICIAN_ASSIGNMENT</code>, <code>TECHNICIAN_ASSIGNED</code>) — identical pipeline, narrower check</h3>
+  <div class="mermaid">
+sequenceDiagram
+    autonumber
+    participant Sched as TAS Schedule (NEW, per-candidate)
+    participant TAS
+    participant CL
+    participant DAS
+
+    Note over Sched,TAS: candidate still in exactly {Trigger State} at ETA — no span, since the next hop has its own scheduler
+    Sched->>TAS: fire RT check for execution_candidate_id
+    TAS->>TAS: verify current_state == Trigger State (singleton Action States)
+    TAS->>CL: INSTALLATION_FAILED equivalent, failure_reason=TIMEOUT_AWAITING_TECHNICIAN_ASSIGNMENT or TIMEOUT_TECHNICIAN_ASSIGNED (NEW)
+    CL->>CL: T3 fires (EXISTING, unmodified) - PENDING_INSTALL to REQUESTED
+    CL->>DAS: ClStateChanged(transitionType=T3, entryReason=RETRY) (EXISTING, unmodified)
+    DAS->>DAS: prepare_retry_state, re-invoke routing engine (EXISTING, unmodified)
+    alt reroute succeeds
+      DAS->>TAS: AllocationAssigned (EXISTING) - new candidate created fresh at AWAITING_SLOT_PROPOSAL
+    else reroute fails
+      DAS->>DAS: retry_count++; AllocationHeld (P191) if under P50 cap, else AllocStateRoutingFailure (EXISTING)
+    end
+  </div>
+  <div class="hint">Same pipeline as the span scheduler above — the only difference is the membership check is against a one-element set instead of three. This is exactly why <code>Action States</code> as a field is sufficient to express both shapes without two different mechanisms.</div>
+
+  <h3>Old candidate's terminal state + audit trail (unchanged mechanics, new reason codes)</h3>
   <table>
-    <thead><tr><th>Field</th><th>Value on RT via SCHED-01</th><th>Compare: value on RT via today's P74</th></tr></thead>
+    <thead><tr><th>Field</th><th>Value on RT via <code>AWAITING_TECHNICIAN_ASSIGNMENT</code></th><th>Value on RT via <code>TECHNICIAN_ASSIGNED</code></th><th>Value on RT via <code>ARRIVED_AT_SITE</code></th><th>Compare: today's P74</th></tr></thead>
     <tbody>
-      <tr><td><code>current_state</code></td><td><code>CANCELLED_BY_UPSTREAM</code></td><td><code>CANCELLED_BY_UPSTREAM</code> (same)</td></tr>
-      <tr><td><code>failure_reason</code></td><td><code>TIMEOUT_ARRIVED_AT_SITE</code> (NEW)</td><td><code>TIMEOUT_P74</code></td></tr>
-      <tr><td><code>failure_subreason_source</code></td><td><code>SYSTEM</code></td><td><code>SYSTEM</code> (same)</td></tr>
-      <tr><td><code>failure_subreason_code</code></td><td>TBD — see Open Questions in B5</td><td><code>CSP_NO_SHOW</code></td></tr>
-      <tr><td>Quality/enforcement signal</td><td><code>DeclinePattern(TIMEOUT)</code> — same mechanism, same call site pattern</td><td><code>DeclinePattern(TIMEOUT)</code> (same)</td></tr>
+      <tr><td><code>current_state</code></td><td><code>CANCELLED_BY_UPSTREAM</code></td><td><code>CANCELLED_BY_UPSTREAM</code></td><td><code>CANCELLED_BY_UPSTREAM</code></td><td><code>CANCELLED_BY_UPSTREAM</code> (same)</td></tr>
+      <tr><td><code>failure_reason</code></td><td><code>TIMEOUT_AWAITING_TECHNICIAN_ASSIGNMENT</code> (NEW)</td><td><code>TIMEOUT_TECHNICIAN_ASSIGNED</code> (NEW)</td><td><code>TIMEOUT_ARRIVED_AT_SITE</code> (NEW)</td><td><code>TIMEOUT_P74</code></td></tr>
+      <tr><td><code>failure_subreason_source</code></td><td><code>SYSTEM</code></td><td><code>SYSTEM</code></td><td><code>SYSTEM</code></td><td><code>SYSTEM</code> (same)</td></tr>
+      <tr><td><code>failure_subreason_code</code></td><td>TBD — see Open Questions in B5</td><td>TBD — see Open Questions in B5</td><td>TBD — see Open Questions in B5</td><td><code>CSP_NO_SHOW</code></td></tr>
+      <tr><td>Quality/enforcement signal</td><td><code>DeclinePattern(TIMEOUT)</code></td><td><code>DeclinePattern(TIMEOUT)</code></td><td><code>DeclinePattern(TIMEOUT)</code></td><td><code>DeclinePattern(TIMEOUT)</code> (same)</td></tr>
     </tbody>
   </table>
   <hr class="sect-end">
@@ -306,10 +354,12 @@ sequenceDiagram
       <tr><td>2</td><td><span class="status-pill wired">Wired</span></td><td>T3 transition (CL side)</td><td><code>InboundEventProcessingServiceImpl.java</code> in csp-connection-lifecycle-service (~L398-473) — <code>PENDING_INSTALL → REQUESTED</code> on <code>INSTALLATION_FAILED</code>, retry-count / P78-exhaustion check, <code>ClStateChanged(T3)</code> emit. Accepts any <code>failure_subreason_code</code> value already — no schema change needed to add <code>TIMEOUT_ARRIVED_AT_SITE</code>.</td></tr>
       <tr><td>3</td><td><span class="status-pill wired">Wired</span></td><td>Per-candidate scheduling infra</td><td>TAS already runs <code>InstallEventBridgeTaskScheduler</code> / <code>EventBridgeReminderScheduler</code> for the existing <code>ReminderType</code> mechanism (<code>SLOT_PROPOSAL_URGENT</code>, etc.) — same per-candidate one-shot-schedule pattern this spec needs, proven live.</td></tr>
       <tr><td>4</td><td><span class="status-pill missing">Missing</span></td><td>New TAS schedule type: RT trigger on <code>ARRIVED_AT_SITE</code></td><td>No existing <code>ReminderType</code> or schedule maps to "fire a system-timeout equivalent of <code>INSTALLATION_FAILED</code>." <code>InternalTaskController.dispatch()</code> would need a new case; the underlying "call CL as if self-reporting failure" method doesn't exist yet on the TAS side.</td></tr>
-      <tr><td>5</td><td><span class="status-pill missing">Missing</span></td><td>Action-States-aware check ("still in one of N states", not one)</td><td>Every existing scheduler check in TAS (<code>ReminderType</code> dispatch) is a single-state check. The multi-state <code>Action States</code> membership test is new logic, even though it's small (a set-membership check instead of an equality check).</td></tr>
-      <tr><td>6</td><td><span class="status-pill missing">Missing</span></td><td><code>TIMEOUT_ARRIVED_AT_SITE</code> reason code</td><td>Not defined anywhere yet. Needs adding wherever <code>TIMEOUT_P74</code> is enumerated (validation lists, if any, on both TAS and CL sides).</td></tr>
-      <tr><td>7</td><td><span class="status-pill missing">Missing</span></td><td>New Nudge scheduler + CSP-facing copy</td><td>No reminder type or copy exists for "your booking will be reassigned soon" at <code>ARRIVED_AT_SITE</code>. Channel (in-app feed flag vs. push vs. SMS) not yet decided — see companion framework doc.</td></tr>
-      <tr><td>8</td><td><span class="status-pill partial">Partial</span></td><td>ETA values</td><td>Both the RT ETA and the Nudge ETA/lead-time are TBD — placeholder in A5 and WF above. Blocking B5's Gherkin from being fully concrete (see Open Questions).</td></tr>
+      <tr><td>5</td><td><span class="status-pill missing">Missing</span></td><td>Action-States-aware check ("still in one of N states", not one)</td><td>Every existing scheduler check in TAS (<code>ReminderType</code> dispatch) is a single-state check. The multi-state <code>Action States</code> membership test is new logic, even though it's small (a set-membership check instead of an equality check). Needed only for the <code>ARRIVED_AT_SITE</code> RT row — the other two new RT triggers are singleton and can reuse the existing equality-check shape.</td></tr>
+      <tr><td>6</td><td><span class="status-pill missing">Missing</span></td><td>Three new reason codes: <code>TIMEOUT_AWAITING_TECHNICIAN_ASSIGNMENT</code>, <code>TIMEOUT_TECHNICIAN_ASSIGNED</code>, <code>TIMEOUT_ARRIVED_AT_SITE</code></td><td>None defined anywhere yet. Needs adding wherever <code>TIMEOUT_P74</code> is enumerated (validation lists, if any, on both TAS and CL sides).</td></tr>
+      <tr><td>7</td><td><span class="status-pill missing">Missing</span></td><td>New RT schedule types on <code>AWAITING_TECHNICIAN_ASSIGNMENT</code> and <code>TECHNICIAN_ASSIGNED</code></td><td>Same shape as row 4 (new <code>InternalTaskController.dispatch()</code> case per trigger state), but each checks a singleton Action State — simpler than the <code>ARRIVED_AT_SITE</code> case since no set-membership logic is needed, only a state-equality check identical to today's <code>ReminderType</code> pattern.</td></tr>
+      <tr><td>8</td><td><span class="status-pill missing">Missing</span></td><td>New Nudge schedulers + CSP-facing copy, on <code>TECHNICIAN_ASSIGNED</code> and <code>ARRIVED_AT_SITE</code></td><td>No reminder type or copy exists for "your booking will be reassigned soon" at either state. Channel (in-app feed flag vs. push vs. SMS) not yet decided — see companion framework doc.</td></tr>
+      <tr><td>9</td><td><span class="status-pill missing">Missing</span></td><td>Feature-flag infrastructure — <code>SCHED_&lt;TRIGGER_STATE&gt;_&lt;ACTION&gt;_ENABLED</code></td><td>Does not exist in code at all today — none of P41, P74, or the live Nudge reminders are individually toggleable; disabling any one of them currently means a deploy. Needs a config source (Parameter Store, matching the existing P-parameter convention) plus a lookup check inserted at every dispatch path — both the 4 already-live schedulers (retrofitted) and the 5 new ones in this spec. This is the one piece of net-new infrastructure this spec requires that isn't a variation on an existing pattern.</td></tr>
+      <tr><td>10</td><td><span class="status-pill partial">Partial</span></td><td>ETA values</td><td>The RT ETA and Nudge lead-time for all three new RT triggers, plus the two new Nudge schedulers, are TBD — placeholders in A5 and WF above. Blocking B5's Gherkin from being fully concrete (see Open Questions).</td></tr>
     </tbody>
   </table>
   <hr class="sect-end">
@@ -321,11 +371,12 @@ sequenceDiagram
   <table>
     <thead><tr><th>OS</th><th>Impacted?</th><th>Notes</th><th>Owner (consulted)</th><th>Sign-off</th></tr></thead>
     <tbody>
-      <tr><td>CL OS</td><td>Clarification, not amendment</td><td>T3 (<code>PENDING_INSTALL→REQUESTED</code>) is unmodified — same transition, same guard, same downstream emit. The only addition is a new value in the <code>failure_subreason_code</code> vocabulary. Worth flagging in the same review that surfaced ASM-CLO-03: P74's OS-specified anchor (<code>INSTALLATION_COMPLETE</code> event) vs. its live code anchor (T1) is a <strong>separate, pre-existing deviation</strong> this spec does not fix — SCHED-01 adds a new, correctly-scoped trigger alongside the existing (mis-anchored) one rather than repairing P74 itself.</td><td>CL OS owner</td><td><span class="badge pending">Pending</span></td></tr>
-      <tr><td>Installation Flow OS / TAS</td><td>Addition</td><td>New per-candidate schedule type (RT trigger) and a new Nudge type, both attached to <code>ARRIVED_AT_SITE</code>. No existing state, transition, or terminal changes — <code>CANCELLED_BY_UPSTREAM</code> is reused as-is.</td><td>Installation Flow OS owner</td><td><span class="badge pending">Pending</span></td></tr>
-      <tr><td>D&amp;A OS</td><td>No</td><td>Zero change. D&amp;A receives the same <code>ClStateChanged(T3)</code> shape it already handles for P74-triggered retries; it cannot distinguish (and doesn't need to) which TAS-side trigger caused it.</td><td>—</td><td>—</td></tr>
-      <tr><td>Quality OS / enforcement pattern detection</td><td>No</td><td><code>DeclinePattern(TIMEOUT)</code> continues to fire from the same D&amp;A call site — this spec adds a new upstream cause, not a new signal type.</td><td>—</td><td>—</td></tr>
-      <tr><td>ESR (Event Schema Registry)</td><td>Verify</td><td>Confirm whether <code>failure_subreason_code</code> is a free-text field or a registered enum on the CL/TAS event schemas — determines whether <code>TIMEOUT_ARRIVED_AT_SITE</code> needs formal registration or just documentation.</td><td>ESR owner</td><td><span class="badge pending">Pending</span></td></tr>
+      <tr><td>CL OS</td><td>Clarification, not amendment</td><td>T3 (<code>PENDING_INSTALL→REQUESTED</code>) is unmodified — same transition, same guard, same downstream emit, for all three new RT triggers. The only addition is three new values in the <code>failure_subreason_code</code> vocabulary. Worth flagging in the same review that surfaced ASM-CLO-03: P74's OS-specified anchor (<code>INSTALLATION_COMPLETE</code> event) vs. its live code anchor (T1) is a <strong>separate, pre-existing deviation</strong> this spec does not fix — SCHED-01 adds new, correctly-scoped triggers alongside the existing (mis-anchored) one rather than repairing P74 itself.</td><td>CL OS owner</td><td><span class="badge pending">Pending</span></td></tr>
+      <tr><td>Installation Flow OS / TAS</td><td>Addition</td><td>Three new per-candidate RT schedule types (<code>AWAITING_TECHNICIAN_ASSIGNMENT</code>, <code>TECHNICIAN_ASSIGNED</code>, <code>ARRIVED_AT_SITE</code>) and two new Nudge types (<code>TECHNICIAN_ASSIGNED</code>, <code>ARRIVED_AT_SITE</code>). Also: two TAS candidate states move from "deliberate No-RT" to "RT-enabled" — a policy change the OS should record explicitly, not just infer from new schedule rows. No existing state, transition, or terminal changes — <code>CANCELLED_BY_UPSTREAM</code> is reused as-is throughout.</td><td>Installation Flow OS owner</td><td><span class="badge pending">Pending</span></td></tr>
+      <tr><td>D&amp;A OS</td><td>No</td><td>Zero change. D&amp;A receives the same <code>ClStateChanged(T3)</code> shape it already handles for P74-triggered retries, for all three new RT triggers; it cannot distinguish (and doesn't need to) which TAS-side trigger caused it.</td><td>—</td><td>—</td></tr>
+      <tr><td>Quality OS / enforcement pattern detection</td><td>No</td><td><code>DeclinePattern(TIMEOUT)</code> continues to fire from the same D&amp;A call site for all three new triggers — this spec adds new upstream causes, not a new signal type.</td><td>—</td><td>—</td></tr>
+      <tr><td>ESR (Event Schema Registry)</td><td>Verify</td><td>Confirm whether <code>failure_subreason_code</code> is a free-text field or a registered enum on the CL/TAS event schemas — determines whether the three new codes (<code>TIMEOUT_AWAITING_TECHNICIAN_ASSIGNMENT</code>, <code>TIMEOUT_TECHNICIAN_ASSIGNED</code>, <code>TIMEOUT_ARRIVED_AT_SITE</code>) need formal registration or just documentation.</td><td>ESR owner</td><td><span class="badge pending">Pending</span></td></tr>
+      <tr><td>Config / Platform OS (feature flags)</td><td>Addition</td><td>New config namespace for <code>SCHED_&lt;TRIGGER_STATE&gt;_&lt;ACTION&gt;_ENABLED</code> flags — five new flags for this spec's new schedulers, plus a recommendation to retrofit flags onto the four already-live schedulers (P41, P74's live Nudges) for consistent operability. Needs a decision on config source (Parameter Store vs. a dedicated feature-flag service) and who owns toggling them in an incident.</td><td>Platform/Config owner</td><td><span class="badge pending">Pending</span></td></tr>
     </tbody>
   </table>
   <hr class="sect-end">
@@ -394,23 +445,74 @@ sequenceDiagram
     • This is the base-principle boundary (no RT once both sides have invested) enforced at the
       implementation level, not just documented as a policy</pre></div>
 
+  <div class="gherkin"><pre><span class="kw">LOGIC-4:</span> RT fires on a singleton Trigger State — <code>AWAITING_TECHNICIAN_ASSIGNMENT</code>
+
+  <span class="kw">Given</span> a candidate enters AWAITING_TECHNICIAN_ASSIGNMENT at time T
+  <span class="kw">And</span>   no technician is assigned before T + ETA (TBD)
+  <span class="kw">When</span>  the RT schedule fires
+  <span class="kw">Then</span>  TAS verifies current_state == AWAITING_TECHNICIAN_ASSIGNMENT (singleton Action States)
+  <span class="kw">And</span>   TAS emits the INSTALLATION_FAILED equivalent with failure_reason=TIMEOUT_AWAITING_TECHNICIAN_ASSIGNMENT
+  <span class="kw">And</span>   CL fires T3 and D&amp;A reroutes, identically to LOGIC-1
+
+  <span class="kw">Verify:</span>
+    • Same shape as LOGIC-1's verify block, with failure_reason = 'TIMEOUT_AWAITING_TECHNICIAN_ASSIGNMENT'
+    • Negative — if the candidate advances to TECHNICIAN_ASSIGNED before T + ETA, this scheduler
+      must NOT fire (singleton, unlike ARRIVED_AT_SITE's span) — the newly-armed TECHNICIAN_ASSIGNED
+      RT schedule takes over coverage instead</pre></div>
+
+  <div class="gherkin"><pre><span class="kw">LOGIC-5:</span> RT fires on a singleton Trigger State — <code>TECHNICIAN_ASSIGNED</code>
+
+  <span class="kw">Given</span> a candidate enters TECHNICIAN_ASSIGNED at time T
+  <span class="kw">And</span>   the technician never reaches ARRIVED_AT_SITE before T + ETA (TBD)
+  <span class="kw">When</span>  the RT schedule fires
+  <span class="kw">Then</span>  TAS verifies current_state == TECHNICIAN_ASSIGNED (singleton Action States)
+  <span class="kw">And</span>   TAS emits the INSTALLATION_FAILED equivalent with failure_reason=TIMEOUT_TECHNICIAN_ASSIGNED
+  <span class="kw">And</span>   CL fires T3 and D&amp;A reroutes, identically to LOGIC-1
+
+  <span class="kw">Verify:</span>
+    • Same shape as LOGIC-1's verify block, with failure_reason = 'TIMEOUT_TECHNICIAN_ASSIGNED'
+    • Negative — if the candidate advances to ARRIVED_AT_SITE before T + ETA, this scheduler
+      must NOT fire — coverage passes to the ARRIVED_AT_SITE RT schedule instead</pre></div>
+
+  <div class="gherkin"><pre><span class="kw">LOGIC-6:</span> Feature flag off — scheduler must not arm or fire
+
+  <span class="kw">Given</span> SCHED_ARRIVED_AT_SITE_RT_ENABLED is set to false in config
+  <span class="kw">And</span>   a candidate enters ARRIVED_AT_SITE at time T
+  <span class="kw">When</span>  T + ETA passes with the candidate still in an Action State
+  <span class="kw">Then</span>  no RT check fires — the flag is read before the schedule is even armed, not just before firing
+  <span class="kw">And</span>   the candidate is left exactly as CL's existing (mis-anchored) P74 would still independently handle it —
+        this scheduler being off does not remove P74's own coverage, since P74 keeps running underneath as a backstop
+
+  <span class="kw">Verify:</span>
+    • No new TAS-side schedule record created for this candidate when the flag is false at entry time
+    • Toggling the flag from false to true does NOT retroactively arm schedules for candidates that
+      already entered the state while it was off — flag state is read at entry, not polled continuously
+    • Negative — confirm this is true independently for each of the five new flags in this spec;
+      one flag being off must not affect any other scheduler's behavior</pre></div>
+
   <h3>Open questions for PM (no silent defaults)</h3>
   <table>
     <thead><tr><th>Question</th><th>Best guess (needs confirmation)</th></tr></thead>
     <tbody>
-      <tr><td>RT ETA — how long after entering <code>ARRIVED_AT_SITE</code> should RT be eligible to fire?</td><td>TBD — not yet estimated. Needs a real distribution of on-site step-completion times to set sensibly; picking a number without that data would be a silent default.</td></tr>
-      <tr><td>Nudge lead time — how long before the RT ETA should the warning fire?</td><td>TBD. Should be meaningfully before the RT ETA, not simultaneous — needs the RT ETA decided first.</td></tr>
-      <tr><td><code>failure_subreason_code</code> for this new reason — reuse <code>CSP_NO_SHOW</code> or introduce a new value?</td><td>Leaning toward a new value (something like <code>CSP_STALLED_ONSITE</code>) since "no-show" implies the CSP never arrived, which is false here — the CSP arrived and stalled. Needs confirmation, not asserted.</td></tr>
-      <tr><td>Does the Nudge scheduler need its own copy/channel decision, or reuse the existing passive in-app feed-flag pattern?</td><td>Default to reusing the existing pattern (per the companion framework doc's "how to size Action States" convention) unless there's a reason to build a new channel for this specific warning.</td></tr>
+      <tr><td>RT ETA for <code>AWAITING_TECHNICIAN_ASSIGNMENT</code></td><td>TBD — not yet estimated.</td></tr>
+      <tr><td>RT ETA for <code>TECHNICIAN_ASSIGNED</code></td><td>TBD — not yet estimated.</td></tr>
+      <tr><td>RT ETA for <code>ARRIVED_AT_SITE</code></td><td>TBD — not yet estimated. Needs a real distribution of on-site step-completion times to set sensibly; picking a number without that data would be a silent default.</td></tr>
+      <tr><td>Nudge lead time for <code>TECHNICIAN_ASSIGNED</code> and <code>ARRIVED_AT_SITE</code> — how long before each RT ETA should the warning fire?</td><td>TBD for both. Should be meaningfully before the corresponding RT ETA, not simultaneous — needs the RT ETAs decided first.</td></tr>
+      <tr><td><code>failure_subreason_code</code> values for the three new reasons — reuse existing codes (e.g. <code>CSP_NO_SHOW</code>) or introduce new ones per trigger?</td><td>Leaning toward three new, distinct values (something like <code>CSP_UNASSIGNED_TIMEOUT</code>, <code>CSP_NOT_TRAVELING</code>, <code>CSP_STALLED_ONSITE</code>) since each describes a materially different failure mode and reusing <code>CSP_NO_SHOW</code> across all three would erase that distinction in the audit trail. Needs confirmation, not asserted.</td></tr>
+      <tr><td>Do the two new Nudge schedulers need their own copy/channel decision, or reuse the existing passive in-app feed-flag pattern?</td><td>Default to reusing the existing pattern (per the companion framework doc's "how to size Action States" convention) unless there's a reason to build a new channel for these specific warnings.</td></tr>
+      <tr><td>Feature flag config source — Parameter Store (matching the existing P-parameter pattern) or a dedicated feature-flag service?</td><td>Leaning Parameter Store for consistency with P41/P74/P-series config, but no dedicated flag service currently exists for per-scheduler toggles at this granularity — worth a platform-team opinion before committing.</td></tr>
+      <tr><td>Should the four already-live schedulers (P41, live Nudges) be retrofitted with flags in this same spec, or tracked as a follow-up?</td><td>Recommended in this spec (see WR row 9) for operability parity, but not yet confirmed as in-scope vs. a fast-follow.</td></tr>
     </tbody>
   </table>
 
   <h3>Out of scope for SCHED-01</h3>
   <ul>
-    <li>Repairing P74's OS-vs-code anchor deviation (ASM-CLO-03) — filed as a separate, pre-existing finding, not fixed by this spec.</li>
-    <li>The other 7 uncovered dwell states from the framework's state inventory (D&amp;A <code>UNASSIGNED</code>/<code>ACCEPTED</code>/<code>REALLOCATION_PENDING</code>/<code>REASSIGNED</code>, CL <code>REQUESTED</code>, TAS <code>SLOT_AUTO_CONFIRMED</code>/<code>RATING_PENDING</code>) — future SCHED-NN items.
+    <li>Repairing P74's OS-vs-code anchor deviation (ASM-CLO-03) — filed as a separate, pre-existing finding, not fixed by this spec. P74 keeps running underneath all seven schedulers as a backstop.</li>
+    <li>The System Intervention scheduler on <code>AWAITING_CUSTOMER_SLOT_CONFIRMATION</code> — listed in WF for completeness of the 7-state picture, but its mechanism (automated call to the customer) is not live anywhere and needs its own build spec, not bundled into this one.</li>
+    <li>D&amp;A states outside TAS's ownership (<code>UNASSIGNED</code>, <code>ACCEPTED</code>, <code>REALLOCATION_PENDING</code>, <code>REASSIGNED</code>) and CL's <code>REQUESTED</code> state — this spec is scoped to the 7 TAS-owned Trigger States only, per the title. Future SCHED-NN items if D&amp;A/CL want their own per-stage schedulers.</li>
     <li>Widening P41's Action States to include D&amp;A's <code>ACCEPTED</code> state — flagged as an open item in the companion framework doc, unresolved due to D&amp;A's lack of visibility into fee payment. Not part of this spec.</li>
     <li>Deciding a real communication channel (push/SMS/IVR) for Nudge or System Intervention generally — separate decision, tracked in the framework doc.</li>
+    <li>Retrofitting feature flags onto the four already-live schedulers (P41, live Nudges) — recommended (see WR row 9, B5 Open Questions) but not committed as in-scope for this version.</li>
   </ul>
   <hr class="sect-end">
 </section>
@@ -423,11 +525,14 @@ sequenceDiagram
       <tr><td><span class="badge light">Light</span></td><td>Quick Check filled (incl. tier)</td><td class="check">✓</td></tr>
       <tr><td><span class="badge light">Light</span></td><td>Required sections (A1, A2, A5, A8, B5) filled</td><td class="check">✓ (with pending sub-items marked)</td></tr>
       <tr><td><span class="badge light">Light</span></td><td>Negative checks present on every Verify block</td><td class="check">✓</td></tr>
-      <tr><td><span class="badge light">Light</span></td><td>Workflow diagram present</td><td class="check">✓</td></tr>
-      <tr><td><span class="badge light">Light</span></td><td>Wired-layers table present</td><td class="check">✓</td></tr>
-      <tr><td><span class="badge light">Light</span></td><td>ETAs finalized (RT window, Nudge lead time)</td><td class="check">Pending</td></tr>
-      <tr><td><span class="badge light">Light</span></td><td>Every A8 row has sign-off received</td><td class="check">Pending</td></tr>
-      <tr><td><span class="badge light">Light</span></td><td><code>failure_subreason_code</code> value confirmed</td><td class="check">Pending</td></tr>
+      <tr><td><span class="badge light">Light</span></td><td>Workflow diagram present, all 7 Trigger States covered</td><td class="check">✓</td></tr>
+      <tr><td><span class="badge light">Light</span></td><td>Wired-layers table present, incl. feature-flag infrastructure row</td><td class="check">✓</td></tr>
+      <tr><td><span class="badge light">Light</span></td><td>All 3 new RT schedulers + 2 new Nudge schedulers have Gherkin coverage</td><td class="check">✓</td></tr>
+      <tr><td><span class="badge light">Light</span></td><td>Feature-flag-off negative check present (LOGIC-6)</td><td class="check">✓</td></tr>
+      <tr><td><span class="badge light">Light</span></td><td>ETAs finalized (3× RT window, 2× Nudge lead time)</td><td class="check">Pending</td></tr>
+      <tr><td><span class="badge light">Light</span></td><td>Every A8 row has sign-off received (incl. new Config/Platform OS row)</td><td class="check">Pending</td></tr>
+      <tr><td><span class="badge light">Light</span></td><td>All 3 new <code>failure_subreason_code</code> values confirmed</td><td class="check">Pending</td></tr>
+      <tr><td><span class="badge light">Light</span></td><td>Feature-flag config source decided (Parameter Store vs. dedicated service)</td><td class="check">Pending</td></tr>
     </tbody>
   </table>
   <div class="note"><strong>Code + schema evidence (verified 2026-07-08):</strong>
@@ -447,6 +552,7 @@ sequenceDiagram
   <table>
     <thead><tr><th>Version</th><th>Date</th><th>Author</th><th>Section(s)</th><th>Change &amp; rationale</th><th>Approver</th></tr></thead>
     <tbody>
+      <tr><td>v0.2</td><td>2026-07-08</td><td>Ashish Raj</td><td>All</td><td>Re-scoped from a single-item pilot (Arrived-at-Site RT only) to <strong>full implementation across all 7 TAS-owned Trigger States</strong>. Adds two new RT schedulers, previously deliberate No-RT states: <code>AWAITING_TECHNICIAN_ASSIGNMENT</code> and <code>TECHNICIAN_ASSIGNED</code> — both singleton Action States, since each one's next hop now has its own scheduler covering it (the exact condition under which the framework doc's sizing rule allows singleton for RT). Adds two new Nudge schedulers (<code>TECHNICIAN_ASSIGNED</code>, <code>ARRIVED_AT_SITE</code>) so RT is never a CSP's first signal. Adds the <strong>Feature Flag</strong> field (6th field in the scheduler model) — every scheduler, new or already-live, gets an independent <code>SCHED_&lt;TRIGGER_STATE&gt;_&lt;ACTION&gt;_ENABLED</code> kill switch, which did not exist in any form before this version. Expands A5 (3 new delta rows + flag mechanism), WF (full 7-state coverage table + a second sequence diagram for the singleton-RT shape), WR (3 new rows incl. a wholly-new Feature Flag infrastructure layer), A8 (new Config/Platform OS row, reason codes pluralized to three), and B5 (LOGIC-4/5/6 plus expanded Open Questions) to match. Out-of-scope list tightened now that two former No-RT states are in-scope.</td><td>Pending</td></tr>
       <tr><td>v0.1</td><td>2026-07-08</td><td>Ashish Raj</td><td>All</td><td>Initial draft. Introduces the per-stage scheduler model (Service, Trigger State, ETA, Action States, Action) and pilots it on the Arrived-at-Site RT gap found during the 2026-07-07 live scheduler audit — a same-state-only RT check would silently under-protect the candidate the moment it advances past its trigger state, since the next states (<code>INSTALLATION_IN_PROGRESS_PRE_FEE</code>, <code>FEE_COLLECTION_PENDING</code>) have no coverage of their own. Reuses the existing P41/T3 reroute pipeline verbatim — no D&amp;A change, no CL transition change — adding only a correctly-scoped TAS-side trigger and a new <code>TIMEOUT_ARRIVED_AT_SITE</code> reason code so the audit trail can distinguish this scheduler's fires from P74's. Also documents, as a separate finding (not fixed by this spec), that P74 itself deviates from its OS-specified anchor (ASM-CLO-03: should anchor on <code>INSTALLATION_COMPLETE</code>, actually anchors on T1). ETAs (RT window, Nudge lead time) and the exact <code>failure_subreason_code</code> value are open questions pending PM confirmation — no silent defaults chosen.</td><td>Pending</td></tr>
     </tbody>
   </table>
