@@ -310,6 +310,26 @@
   <div class="hint"><strong>Deliberate No-RT states (2 of 7 remaining, down from 5 before this spec):</strong> <code>AWAITING_CUSTOMER_SLOT_CONFIRMATION</code> (customer, not CSP, is the bottleneck) and <code>AWAITING_CUSTOMER_OTP</code> (post-investment). <code>INSTALLATION_IN_PROGRESS_POST_FEE</code> is also RT-ineligible for the same post-investment reason but is counted separately above since it sits past the fee-payment boundary rather than being a "CSP could still be rerouted but we choose not to" case.</div>
   <div class="hint"><strong>Feature flags are scoped to RT only.</strong> Nudge and System Intervention don't get one — they're comms-only, non-destructive, and reversible by simply not sending the next one. RT is the action with real blast radius (it pulls a booking away from a CSP), so it's the only action type that needs an independent kill switch. Of the 7 Trigger States above, 4 carry an RT action, but only <strong>3 get a flag in this spec</strong>: <code>AWAITING_TECHNICIAN_ASSIGNMENT</code>, <code>TECHNICIAN_ASSIGNED</code>, <code>ARRIVED_AT_SITE</code>. <code>ASSIGNED</code> (D&amp;A's live P41) is the 4th RT-carrying state — its flag retrofit is <strong>confirmed out of scope</strong> for this version, not today, per explicit PM decision.</div>
 
+  <h3>ETA per scheduler action — one row per Action, not per Trigger State</h3>
+  <div class="expected"><strong>What is expected:</strong> the table above shows Trigger-State-level coverage; this one shows ETA/config granularity, since a single Trigger State can carry two Actions (e.g. <code>ARRIVED_AT_SITE</code> has both a Nudge and an RT, each with its own ETA and its own parameter).</div>
+  <table>
+    <thead><tr><th>#</th><th>Trigger State</th><th>Action</th><th>ETA (parameter)</th><th>Status</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td><code>ASSIGNED</code> (D&amp;A)</td><td>RT (P41)</td><td>2h — <code>P41_ACCEPTANCE_WINDOW_HOURS</code>, already live</td><td class="status-tag live" style="margin-left:0;">Live</td></tr>
+      <tr><td>2</td><td><code>AWAITING_SLOT_PROPOSAL</code></td><td>Nudge (<code>SLOT_PROPOSAL_URGENT</code>)</td><td>1h — <code>ES_INSTALL_SLOT_PROPOSAL_URGENT_HOURS</code>, already live</td><td class="status-tag live" style="margin-left:0;">Live</td></tr>
+      <tr><td>3</td><td><code>AWAITING_CUSTOMER_SLOT_CONFIRMATION</code></td><td>System Intervention</td><td>TBD — <code>INSTALL_AWAITING_CUSTOMER_SLOT_CONFIRMATION_SI_ETA</code>, new</td><td class="status-tag" style="margin-left:0;">Proposed</td></tr>
+      <tr><td>4</td><td><code>AWAITING_TECHNICIAN_ASSIGNMENT</code></td><td>Nudge (<code>TECHNICIAN_ASSIGNMENT_URGENT</code>)</td><td>1h — <code>ES_INSTALL_TECHNICIAN_ASSIGNMENT_URGENT_HOURS</code>, already live</td><td class="status-tag live" style="margin-left:0;">Live</td></tr>
+      <tr><td>5</td><td><code>AWAITING_TECHNICIAN_ASSIGNMENT</code></td><td>RT</td><td>TBD — <code>INSTALL_AWAITING_TECHNICIAN_ASSIGNMENT_RT_ETA</code>, new</td><td class="status-tag" style="margin-left:0;">Proposed</td></tr>
+      <tr><td>6</td><td><code>TECHNICIAN_ASSIGNED</code></td><td>Nudge</td><td>TBD — <code>INSTALL_TECHNICIAN_ASSIGNED_NUDGE_ETA</code>, new</td><td class="status-tag" style="margin-left:0;">Proposed</td></tr>
+      <tr><td>7</td><td><code>TECHNICIAN_ASSIGNED</code></td><td>RT</td><td>TBD — <code>INSTALL_TECHNICIAN_ASSIGNED_RT_ETA</code>, new</td><td class="status-tag" style="margin-left:0;">Proposed</td></tr>
+      <tr><td>8</td><td><code>ARRIVED_AT_SITE</code></td><td>Nudge</td><td>TBD — <code>INSTALL_ARRIVED_AT_SITE_NUDGE_ETA</code>, new</td><td class="status-tag" style="margin-left:0;">Proposed</td></tr>
+      <tr><td>9</td><td><code>ARRIVED_AT_SITE</code></td><td>RT (span)</td><td>x hrs — <code>INSTALL_ARRIVED_AT_SITE_RT_ETA</code>, new</td><td class="status-tag" style="margin-left:0;">Proposed</td></tr>
+      <tr><td>10</td><td><code>INSTALLATION_IN_PROGRESS_POST_FEE</code></td><td>Nudge only</td><td>TBD — <code>INSTALL_INSTALLATION_IN_PROGRESS_POST_FEE_NUDGE_ETA</code>, new</td><td class="status-tag" style="margin-left:0;">Proposed</td></tr>
+      <tr><td>11</td><td><code>AWAITING_CUSTOMER_OTP</code></td><td>Nudge (<code>HAPPY_CODE_SUBMIT_URGENT</code>)</td><td>4h — <code>ES_INSTALL_HAPPY_CODE_SUBMIT_URGENT_HOURS</code>, already live</td><td class="status-tag live" style="margin-left:0;">Live</td></tr>
+    </tbody>
+  </table>
+  <div class="hint">Rows 5, 7, and 9 are the 3 new RT ETAs this spec adds (numeric values TBD — see B5 Open Questions). Rows 6 and 8 are the 2 new Nudge ETAs. Row 3 (System Intervention) is documented here for completeness but its build is out of scope for this spec (see Out of Scope). The 4 already-live rows (1, 2, 4, 11) show their real, already-configured values and parameter names — none of this spec's work touches them, except that all 11 rows are in scope for the Working Hours projection requirement above.</div>
+
   <h3>RT cascade for the span scheduler (<code>ARRIVED_AT_SITE</code>) — reuses the existing pipeline verbatim (no D&amp;A change)</h3>
   <div class="mermaid">
 sequenceDiagram
