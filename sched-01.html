@@ -116,6 +116,7 @@
   <ol><li><a href="#quickcheck"><span class="ix">QC.</span>7-line triage</a></li></ol>
   <h2 class="what">Part A — WHAT (the change)</h2>
   <ol>
+    <li><a href="#objective"><span class="ix">—</span>Objective</a></li>
     <li><a href="#a1"><span class="ix">A1.</span>Metadata</a></li>
     <li><a href="#a2"><span class="ix">A2.</span>Why this change</a></li>
     <li><a href="#a5"><span class="ix">A5.</span>The delta</a></li>
@@ -178,6 +179,18 @@
   <p>The PM's decisions: why, what the new flow looks like, what changes service-by-service.</p>
   <div class="author-note">Authored by the PM. Changes here trigger re-review.</div>
 </div>
+
+<section class="spec" id="objective">
+  <h2><span class="num">—</span> Objective <span class="tier what">WHAT</span></h2>
+  <p>The broader objective is simple: make sure the connection gets activated <strong>on time</strong> — on or before the slot both the CSP and the customer have already agreed on. Everything else in this spec is in service of that one outcome.</p>
+  <p>P74 exists for exactly this reason. It gives the CSP a bounded window to move the connection out of <code>PENDING_INSTALL</code>. If the CSP doesn't get there in time, the booking is taken back and handed to someone else who might actually be able to install it before the customer's patience — and the SLA — run out.</p>
+  <p>The problem is that P74, as a single flat clock, doesn't account for two very different situations that land on the exact same timer:</p>
+  <ul>
+    <li><strong>Customer-side delay in slot confirmation.</strong> When the customer, not the CSP, is the one holding things up, the CSP is not the blocker — but P74 doesn't know that, and keeps ticking against them anyway.</li>
+    <li><strong>On-ground installation steps where the CSP has already made major investment.</strong> Once a technician has traveled to site and started the actual work, real time and effort has already gone in — but the booking still gets pulled the moment the same blind timeout expires, regardless of how close the CSP actually was to finishing.</li>
+  </ul>
+  <p>This spec solves this by replacing the one blind clock with <strong>state-based schedulers</strong> — a timer per stage, each carrying the action that actually fits what's true at that stage — instead of one flat timeout applied uniformly to every situation.</p>
+</section>
 
 <section class="spec" id="a1">
   <h2><span class="num">A1.</span> Metadata <span class="tier what">WHAT</span></h2>
@@ -762,7 +775,7 @@ sequenceDiagram
   <table>
     <thead><tr><th>Version</th><th>Date</th><th>Author</th><th>Section(s)</th><th>Change &amp; rationale</th><th>Approver</th></tr></thead>
     <tbody>
-      <tr><td>v0.1</td><td>2026-07-08</td><td>Ashish Raj</td><td>All</td><td>Initial draft. Introduces the per-stage scheduler model — <code>(Service, Trigger State, ETA, Action States, Action, Feature Flag, Outbox Event)</code> — as the full implementation across all 7 TAS-owned Trigger States (<code>AWAITING_SLOT_PROPOSAL</code>, <code>AWAITING_CUSTOMER_SLOT_CONFIRMATION</code>, <code>AWAITING_TECHNICIAN_ASSIGNMENT</code>, <code>TECHNICIAN_ASSIGNED</code>, <code>ARRIVED_AT_SITE</code>, <code>INSTALLATION_IN_PROGRESS_POST_FEE</code>, <code>AWAITING_CUSTOMER_OTP</code>), not a single-item pilot.
+      <tr><td>v0.1</td><td>2026-07-08</td><td>Ashish Raj</td><td>Objective, A1, A2, A5, WF, WR, A8, B5, Out of Scope, Completeness checklist</td><td>Initial draft. Opens with a plain-language <strong>Objective</strong> section: the broader goal is getting the connection activated on time, on or before the slot the CSP and customer already agreed on — P74 exists to reallocate a booking a CSP can't complete in time, but as one flat clock it can't tell "customer is the one delaying slot confirmation" from "CSP has already invested real on-ground effort," and treats both the same way. Introduces the per-stage scheduler model — <code>(Service, Trigger State, ETA, Action States, Action, Feature Flag, Outbox Event)</code> — as the full implementation across all 7 TAS-owned Trigger States (<code>AWAITING_SLOT_PROPOSAL</code>, <code>AWAITING_CUSTOMER_SLOT_CONFIRMATION</code>, <code>AWAITING_TECHNICIAN_ASSIGNMENT</code>, <code>TECHNICIAN_ASSIGNED</code>, <code>ARRIVED_AT_SITE</code>, <code>INSTALLATION_IN_PROGRESS_POST_FEE</code>, <code>AWAITING_CUSTOMER_OTP</code>), not a single-item pilot.
         <br><br><strong>New RT/Nudge coverage:</strong> 3 new RT schedulers — <code>AWAITING_TECHNICIAN_ASSIGNMENT</code> and <code>TECHNICIAN_ASSIGNED</code> (singleton Action States, since each one's next hop now has its own scheduler) and <code>ARRIVED_AT_SITE</code> (a 3-state span — <code>ARRIVED_AT_SITE</code>, <code>INSTALLATION_IN_PROGRESS_PRE_FEE</code>, <code>FEE_COLLECTION_PENDING</code> — since those two neighbor states have no scheduler of their own). <code>Action States</code> resolves the same-state-vs-gate-check design question as a sizing decision rather than a fixed rule. 2 new Nudge schedulers (<code>TECHNICIAN_ASSIGNED</code>, <code>ARRIVED_AT_SITE</code>) so RT is never a CSP's first signal — each also drives a live countdown timer on the CSP home feed (not just a one-time Updates-section entry), computed from the RT's actual, working-hours-projected fire time, not naive ETA arithmetic. Reuses the existing P41/T3 reroute pipeline verbatim — no D&amp;A change, no CL transition change — adding only correctly-scoped TAS-side triggers and three new <code>failure_reason</code> values (<code>TIMEOUT_AWAITING_TECHNICIAN_ASSIGNMENT</code>, <code>TIMEOUT_TECHNICIAN_ASSIGNED</code>, <code>TIMEOUT_ARRIVED_AT_SITE</code>) so the audit trail can distinguish which scheduler fired. <code>failure_subreason_code</code> reuses the existing <code>CSP_NO_SHOW</code> value across all three — its actual meaning ("CSP did not move the candidate forward in the funnel") generically fits every stalled scenario, and the distinct <code>failure_reason</code> values already carry the per-scheduler distinction.
         <br><br><strong>Feature Flag, scoped to RT only:</strong> <code>SCHED_&lt;TRIGGER_STATE&gt;_RT_ENABLED</code> on the 3 new RT schedulers. Nudge and System Intervention don't get one — comms-only, non-destructive, reversible by simply not sending the next one, so a kill switch adds operational surface without a matching risk. D&amp;A's P41 (the 4th RT-carrying Trigger State) is explicitly out of scope for a flag retrofit in this version, not tracked as a follow-up here either.
         <br><br><strong>Common scheduling engine:</strong> the scheduling capability (arm on Trigger State entry, check Action States at ETA, dispatch the Action) is scoped as shared across D&amp;A, CL, and TAS, closing — not extending — the existing duplication of 3 independent <code>EventBridgeTaskScheduler</code> implementations. Raises this spec's Tier from Light to Medium; surfaces a new Platform/Shared-Services OS question with no existing owner.
