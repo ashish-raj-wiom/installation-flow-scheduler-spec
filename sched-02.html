@@ -1,0 +1,500 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SCHED-02 — P74 guard: no retrigger once the security fee is paid · Change Spec</title>
+<style>
+  :root {
+    --bg: #fafaf9; --surface: #ffffff; --ink: #1a1a1a; --muted: #6b6b6b; --rule: #e5e5e2;
+    --core: #0b6b3a; --core-bg: #e9f5ee;
+    --cond: #8a5a00; --cond-bg: #fbf1dd;
+    --what: #1f3c6e; --what-bg: #e8eef8;
+    --how: #5b2a86; --how-bg: #efe6f7;
+    --guard: #b91c1c; --guard-bg: #fee2e2;
+    --required: #b91c1c; --required-bg: #fee2e2;
+    --illustrative: #6b7280; --illustrative-bg: #f1f3f5;
+    --quickcheck-bg: #fef9c3; --quickcheck-rule: #ca8a04; --quickcheck-ink: #713f12;
+    --hint-bg: #ecfeff; --hint-rule: #0e7490; --hint-ink: #155e75;
+    --delta-bg: #eef6ff; --delta-rule: #1f3c6e;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Inter", "Helvetica Neue", Arial, sans-serif; font-size: 15px; line-height: 1.55; color: var(--ink); background: var(--bg); }
+  .layout { display: grid; grid-template-columns: 280px 1fr; min-height: 100vh; }
+  nav.toc { position: sticky; top: 0; align-self: start; height: 100vh; overflow-y: auto; padding: 24px 18px; border-right: 1px solid var(--rule); background: var(--surface); font-size: 13px; }
+  nav.toc h2 { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin: 18px 0 6px; }
+  nav.toc h2:first-of-type { margin-top: 0; }
+  nav.toc h2.qc { color: var(--quickcheck-ink); border-left: 3px solid var(--quickcheck-rule); padding-left: 8px; }
+  nav.toc h2.what { color: var(--what); border-left: 3px solid var(--what); padding-left: 8px; }
+  nav.toc h2.how { color: var(--how); border-left: 3px solid var(--how); padding-left: 8px; }
+  nav.toc h2.close { color: var(--muted); border-left: 3px solid var(--muted); padding-left: 8px; }
+  nav.toc ol { list-style: none; padding: 0; margin: 0; }
+  nav.toc li { margin: 4px 0; }
+  nav.toc li a { text-decoration: none; color: var(--ink); display: flex; gap: 8px; align-items: baseline; padding: 4px 6px; border-radius: 4px; font-size: 12.5px; }
+  nav.toc li a:hover { background: var(--bg); }
+  nav.toc li a .ix { color: var(--muted); font-variant-numeric: tabular-nums; min-width: 32px; font-weight: 600; }
+  nav.toc .back { display: block; margin-top: 24px; padding: 8px; font-size: 12px; color: var(--muted); border-top: 1px solid var(--rule); padding-top: 14px; text-decoration: none; }
+  nav.toc .back:hover { color: var(--ink); }
+  main { padding: 40px 56px 120px; max-width: 980px; }
+  header.doc { border-bottom: 2px solid var(--ink); padding-bottom: 20px; margin-bottom: 32px; }
+  header.doc .eyebrow { font-size: 12px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); }
+  header.doc h1 { font-size: 30px; margin: 6px 0 8px; line-height: 1.2; }
+  header.doc p.lede { color: var(--muted); font-size: 15px; margin: 0; max-width: 70ch; }
+  header.doc .meta-row { display: flex; gap: 24px; margin-top: 14px; font-size: 13px; color: var(--muted); flex-wrap: wrap; }
+  .convention { margin-top: 14px; padding: 12px 14px; background: var(--bg); border: 1px dashed var(--rule); border-radius: 5px; font-size: 13px; }
+  .convention .badge { display: inline-block; padding: 2px 7px; border-radius: 3px; font-size: 10px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; margin: 0 4px; vertical-align: middle; }
+  .badge.light { background: var(--core-bg); color: var(--core); }
+  .badge.req { background: var(--required-bg); color: var(--required); }
+  .badge.pending { background: var(--cond-bg); color: var(--cond); }
+  .quickcheck { margin: 28px 0 40px; background: var(--quickcheck-bg); border: 1px solid var(--quickcheck-rule); border-left: 5px solid var(--quickcheck-rule); border-radius: 6px; padding: 18px 22px; }
+  .quickcheck h2 { margin: 0 0 4px; font-size: 13px; text-transform: uppercase; letter-spacing: 0.12em; color: var(--quickcheck-ink); }
+  .quickcheck .qc-tag { font-size: 11px; color: var(--quickcheck-ink); opacity: 0.9; margin-bottom: 12px; }
+  .quickcheck dl { margin: 0; display: grid; grid-template-columns: max-content 1fr; gap: 6px 18px; font-size: 14px; }
+  .quickcheck dt { font-weight: 600; color: var(--quickcheck-ink); }
+  .quickcheck dd { margin: 0; color: var(--ink); }
+  .part-divider { margin: 56px 0 32px; padding: 28px 32px; border-radius: 8px; color: white; }
+  .part-divider.what { background: var(--what); }
+  .part-divider.how { background: var(--how); }
+  .part-divider .label { font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; opacity: 0.8; }
+  .part-divider h2 { font-size: 28px; margin: 4px 0 6px; color: white; }
+  .part-divider p { margin: 0; font-size: 14px; opacity: 0.92; max-width: 70ch; }
+  .part-divider .author-note { margin-top: 12px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.25); font-size: 13px; font-style: italic; opacity: 0.92; }
+  section.spec { margin: 40px 0; scroll-margin-top: 24px; }
+  section.spec h2 { font-size: 21px; margin: 0 0 6px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  section.spec h2 .num { color: var(--muted); font-weight: 600; font-variant-numeric: tabular-nums; }
+  section.spec h3 { font-size: 15px; margin: 16px 0 4px; }
+  .tier { font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; padding: 3px 8px; border-radius: 3px; font-weight: 600; }
+  .tier.what { background: var(--what-bg); color: var(--what); }
+  .tier.how { background: var(--how-bg); color: var(--how); }
+  .tier.guard { background: var(--guard-bg); color: var(--guard); }
+  .expected { background: #f4f4f2; border-left: 3px solid var(--ink); padding: 10px 14px; font-size: 13px; margin: 10px 0 14px; color: #333; }
+  .expected strong { font-weight: 700; }
+  .hint { background: var(--hint-bg); border-left: 3px solid var(--hint-rule); padding: 8px 14px; font-size: 13px; margin: 8px 0 14px; color: var(--hint-ink); border-radius: 4px; }
+  .row-mode { display: inline-block; margin: 6px 0 4px; padding: 3px 9px; border-radius: 3px; font-size: 11px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; }
+  .row-mode.req { background: var(--required-bg); color: var(--required); }
+  table { width: 100%; border-collapse: collapse; margin: 8px 0 14px; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px; border: 1px solid var(--rule); vertical-align: top; }
+  th { background: var(--bg); font-weight: 600; }
+  code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.86em; background: var(--bg); padding: 0.08em 0.32em; border-radius: 3px; border: 1px solid var(--rule); }
+  table.delta th.before { background: #f3f4f6; }
+  table.delta th.after { background: var(--delta-bg); color: var(--delta-rule); }
+  .gherkin { background: var(--surface); border: 1px solid var(--rule); border-left: 3px solid var(--core); padding: 12px 14px; margin: 10px 0; font-size: 13.5px; }
+  .gherkin pre { background: none; border: none; padding: 0; margin: 0; font-size: inherit; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; white-space: pre-wrap; }
+  .gherkin .kw { font-weight: 700; color: var(--core); }
+  table.coverage th { background: var(--bg); }
+  table.coverage td.cls { font-weight: 600; }
+  hr.sect-end { border: none; border-top: 1px dashed var(--rule); margin: 32px 0 0; }
+  footer.checklist { margin-top: 60px; padding-top: 30px; border-top: 2px solid var(--ink); }
+  footer.checklist h2 { font-size: 20px; margin-top: 0; }
+  footer.checklist table { font-size: 13.5px; }
+  footer.checklist td.tier-cell { width: 110px; }
+  footer.checklist td.check { width: 80px; text-align: center; font-family: monospace; }
+  footer.note { margin-top: 24px; padding: 14px; background: var(--bg); border-left: 3px solid var(--ink); font-size: 13px; }
+  .status-pill { display: inline-block; font-weight: 700; padding: 2px 8px; border-radius: 3px; font-size: 11px; }
+  .status-pill.wired { background: #e9f5ee; color: #0b6b3a; }
+  .status-pill.missing { background: #fee2e2; color: #b91c1c; }
+  .status-pill.partial { background: #fbf1dd; color: #8a5a00; }
+  @media print {
+    nav.toc { display: none; }
+    .layout { grid-template-columns: 1fr; }
+    main { padding: 20px; max-width: none; }
+    section.spec, .part-divider, .quickcheck { page-break-inside: avoid; }
+  }
+  @media (max-width: 900px) {
+    .layout { grid-template-columns: 1fr; }
+    nav.toc { position: static; height: auto; border-right: none; border-bottom: 1px solid var(--rule); }
+    main { padding: 24px; }
+  }
+</style>
+</head>
+<body>
+<div class="layout">
+
+<nav class="toc" aria-label="Table of contents">
+  <h2 class="qc">Quick Check</h2>
+  <ol><li><a href="#quickcheck"><span class="ix">QC.</span>7-line triage</a></li></ol>
+  <h2 class="what">Part A — WHAT (the change)</h2>
+  <ol>
+    <li><a href="#objective"><span class="ix">—</span>Objective</a></li>
+    <li><a href="#a1"><span class="ix">A1.</span>Metadata</a></li>
+    <li><a href="#a2"><span class="ix">A2.</span>Why this change</a></li>
+    <li><a href="#a5"><span class="ix">A5.</span>The delta</a></li>
+    <li><a href="#workflow"><span class="ix">WF.</span>Workflow — guard cascade</a></li>
+    <li><a href="#wired"><span class="ix">WR.</span>What's wired / what's not</a></li>
+    <li><a href="#a8"><span class="ix">A8.</span>OS impact &amp; sign-off</a></li>
+  </ol>
+  <h2 class="how">Part B — HOW (detailing)</h2>
+  <ol>
+    <li><a href="#b5"><span class="ix">B5.</span>Acceptance criteria (verification)</a></li>
+  </ol>
+  <h2 class="close">Closeout</h2>
+  <ol>
+    <li><a href="#checklist"><span class="ix">—</span>Completeness checklist</a></li>
+    <li><a href="#changelog"><span class="ix">—</span>Changelog</a></li>
+  </ol>
+  <a class="back" href="./index.html">← Scheduler spec index</a>
+</nav>
+
+<main>
+
+<header class="doc">
+  <div class="eyebrow">Wiom · Change Spec · v0.1 (draft) · PM deliverable · SCHED-02</div>
+  <h1>P74 guard — no retrigger once the customer's security fee is paid</h1>
+  <p class="lede"><strong>Objective:</strong> once the customer has paid the security fee, the CSP has already made a significant, real investment to reach that point — Aadhar submitted, on-site work underway — and P74 should never be the reason that connection is taken away from them. Today P74 fires blind to this: it checks only whether the connection is still in <code>PENDING_INSTALL</code>, nothing about whether the fee is already paid, before either reallocating the booking to a new CSP (T3) or deactivating it outright after repeated retries (T12). This spec adds a guard — once the fee is paid, P74 does neither — and removes the home-feed countdown timer that currently keeps counting down toward a removal that can no longer happen.</p>
+  <p class="lede" style="margin-top:10px">Companion to <a href="https://ashish-raj-wiom.github.io/installation-flow-scheduler-spec/sched-01.html">SCHED-01</a> — same underlying principle (don't remove a booking once real investment has been made), applied here to the existing P74 timer rather than the new per-stage schedulers SCHED-01 introduces.</p>
+  <div class="meta-row">
+    <span><strong>Author:</strong> Ashish Raj &nbsp;·&nbsp; <strong>Reviewer:</strong> Engineering (pending) &nbsp;·&nbsp; <strong>Tier:</strong> Medium — see note</span>
+  </div>
+  <div class="convention">
+    <strong>Tier:</strong>
+    <span class="badge pending">Medium</span> — the guard condition itself is simple, but CL (which owns P74) has zero visibility today into the fee-status field that TAS owns; building that cross-service visibility is a real architecture decision, not a config change. <strong>Status:</strong> <span class="badge pending">Draft, under active audit</span> — sections marked <span class="badge pending">Pending</span> below are placeholders, not omissions.
+    <br><strong>Rows:</strong> <span class="badge req">Required</span> — every row filled or marked pending with a reason.
+  </div>
+</header>
+
+<aside class="quickcheck" id="quickcheck" aria-label="Quick check summary">
+  <h2>Quick Check</h2>
+  <div class="qc-tag">7-line triage.</div>
+  <dl>
+    <dt>What is changing?</dt>
+    <dd>Two things. <strong>(1) A new guard on P74's fire path.</strong> Before CL acts on a P74 expiry (reallocating via T3, or deactivating via T12 after repeated retries), it checks whether the customer's security fee is <code>PAID</code> for the associated TAS execution candidate. If it is, P74 is a no-op — no reallocation, no deactivation, per explicit PM decision covering both transitions. <strong>(2) The home-feed countdown disappears once paid.</strong> TAS already exposes a <code>p74_deadline_at</code> field that drives an existing countdown timer on the CSP/technician app's home feed; once the fee is <code>PAID</code>, TAS suppresses that field so the timer disappears — there's nothing left to count down to.</dd>
+    <dt>What triggered it?</dt>
+    <dd>PM's explicit principle: once the customer has paid, a significant investment has already been made by the CSP to reach that point, and the connection should not be automatically removed from the CSP/technician app because of a P74 retrigger. Verified via code trace that no existing guard checks this — P74's only check today is whether the connection is still in <code>PENDING_INSTALL</code> (<code>SchedulingServiceImpl.loadInState</code>).</dd>
+    <dt>Blast radius</dt>
+    <dd>CL (new guard logic inserted into the existing P74 fire path — <code>SchedulingServiceImpl.processInstallTimeout</code> and/or <code>InboundEventProcessingServiceImpl.handleInstallationFailed</code>, exact insertion point TBD; plus a new cross-service dependency on TAS's fee status, which CL has zero visibility into today) · TAS (owns the fee status already; needs to expose it to CL somehow, and separately needs to suppress its own <code>p74DeadlineAt</code> upstream field once paid — this second part is same-service, no new integration needed) · Gateway/App (no change needed — <code>TaskCardResponse</code>/<code>HomeFeedService</code> already just pass through whatever TAS provides).</dd>
+    <dt>Reversible?</dt>
+    <dd>The guard condition itself is easy to remove if wrong. The CL–TAS cross-service visibility mechanism, once built, is the less-reversible piece — worth getting the architecture right before committing (see Open Questions).</dd>
+    <dt>Money / PII / migration?</dt>
+    <dd>No new money movement — this only reads an existing fee-status field, never changes it. No PII. No migration: P74 timers already armed for in-flight connections are automatically covered by the new guard the next time they fire, since the check happens at fire time, not arm time.</dd>
+    <dt>OS impact / sign-off?</dt>
+    <dd><span class="badge pending">Pending</span> — see A8. CL OS addition (new pre-condition on T3 and T12) · TAS OS clarification (fee status becomes a cross-service-relevant field, and the queue-card-upstream suppression is a new TAS-side behavior) · a Platform/Shared-Services OS question, the same class of problem SCHED-01 raised for its common scheduling engine — CL lacking visibility into another service's business data.</dd>
+    <dt>Tier</dt>
+    <dd>Medium</dd>
+  </dl>
+</aside>
+
+<div class="part-divider what">
+  <div class="label">Part A</div>
+  <h2>WHAT — The Change</h2>
+  <p>The PM's decisions: why, what the new flow looks like, what changes service-by-service.</p>
+  <div class="author-note">Authored by the PM. Changes here trigger re-review.</div>
+</div>
+
+<section class="spec" id="objective">
+  <h2><span class="num">—</span> Objective <span class="tier what">WHAT</span></h2>
+  <p>The broader objective is getting the connection activated on time — on or before the slot the CSP and customer already agreed on. P74 exists to make sure a connection doesn't sit forever with a CSP who isn't going to complete it: if the CSP doesn't move it out of <code>PENDING_INSTALL</code> in time, the booking is taken back and given to someone who might.</p>
+  <p>But once the customer has paid the security fee, the CSP has necessarily already done real work to get there — Aadhar has been submitted, on-site steps are underway (confirmed structurally: TAS's own step-gating logic requires Aadhar before the fee can even become payable). At that point, P74 pulling the connection away doesn't protect the customer from a stalled install — it punishes a CSP who has already invested real effort, for a delay that may have nothing to do with them.</p>
+  <p>This spec adds a guard: once the fee is paid, P74 stops being a threat to that connection at all — no reallocation, no deactivation — and the home-feed timer that currently counts down toward that removal disappears, since there's nothing left to count down to.</p>
+</section>
+
+<section class="spec" id="a1">
+  <h2><span class="num">A1.</span> Metadata <span class="tier what">WHAT</span></h2>
+  <div class="expected"><strong>What is expected:</strong> Title, owner, status, version, baseline.</div>
+  <table>
+    <tr><th style="width:28%">Field</th><th>Value</th></tr>
+    <tr><td>Change title</td><td>P74 guard — no retrigger once the customer's security fee is paid; home-feed timer removed</td></tr>
+    <tr><td>Owner (PM)</td><td>Ashish Raj</td></tr>
+    <tr><td>Status</td><td>Draft — under active audit by PM</td></tr>
+    <tr><td>Version</td><td>v0.1 (2026-07-13)</td></tr>
+    <tr><td>Baseline (OS / Spec / Code)</td><td><strong>P74 arm/fire (CL):</strong> <code>ConnectionTimeoutScheduler.on(ConnectionStateChanged)</code> (<code>services/csp-connection-lifecycle-service/.../infrastructure/scheduling/ConnectionTimeoutScheduler.java:53-71</code>) arms a one-shot EventBridge timer for <code>e.at().plus(parameters.getP74InstallWindow())</code> on entry to <code>PENDING_INSTALL</code> (timer mapping ~L84, schedule call ~L61/L94). <code>SchedulingServiceImpl.processInstallTimeout(String connectionId)</code> (<code>.../application/impl/SchedulingServiceImpl.java:52-71</code>) fires on the EventBridge callback, checks <code>loadInState</code> (~L125-138 — the only existing guard, state-based) before raising <code>InstallationFailed</code>. <strong>T3/T12 branch:</strong> <code>InboundEventProcessingServiceImpl.handleInstallationFailed(InstallationFailed)</code> (<code>.../application/impl/InboundEventProcessingServiceImpl.java:400-473</code>) — retry count vs. P78 max (~L417) branches to T12 (<code>PENDING_INSTALL→PENDING_DEACTIVATION</code>, ~L419-441) or T3 (<code>PENDING_INSTALL→REQUESTED</code>, ~L446-472). <strong>Security fee (TAS):</strong> <code>SecurityFeeStatus</code> enum (<code>NOT_APPLICABLE</code>/<code>PENDING</code>/<code>PAID</code>) at <code>.../domain/model/SecurityFeeStatus.java:4-8</code>, field <code>ExecutionCandidateEntity.securityFeeStatus</code> (<code>.../infrastructure/persistence/ExecutionCandidateEntity.java:257</code>), set via inbound event <code>CustomerSecurityFeePaid</code> (<code>.../domain/event/inbound/CustomerSecurityFeePaid.java</code>, carries <code>paidAt</code> + <code>transactionId</code>), consumed by <code>SuccessfulPaymentEventListener</code> (<code>.../infrastructure/messaging/rabbit/consumer/SuccessfulPaymentEventListener.java:48-217</code>) and applied in TAS's own <code>InboundEventProcessingServiceImpl.process(CustomerSecurityFeePaid)</code> (~L692-722+). <strong>Aadhar-precedes-fee structural guarantee:</strong> <code>InstallStepName.AADHAR</code> is step 2 of 8 (<code>.../domain/model/InstallStepName.java:6-13</code>); <code>StepSubmissionServiceImpl</code> sets <code>securityFeeStatus = PENDING</code> right after Aadhar submission (~L171-172, handler ~L145-200); <code>InstallationGuards.enforceFeeBeforeSharedStep()</code> (<code>.../domain/service/InstallationGuards.java:134-140</code>, invoked ~L227) blocks progression to step 3 unless the fee is already <code>PAID</code>. <strong>Home-feed timer (already live):</strong> <code>TaskCardResponse.p74_deadline_at</code> (<code>services/csp-gateway-service/.../feed/dto/response/TaskCardResponse.java:30-32</code>), sourced from <code>TasQueueCardUpstream.p74DeadlineAt</code> (<code>.../feed/dto/upstream/TasQueueCardUpstream.java:44-46</code>), wired in <code>HomeFeedService.java:242</code> — code comment marks it "GAP-06; INSTALL-only, CL-authored."</td></tr>
+  </table>
+  <hr class="sect-end">
+</section>
+
+<section class="spec" id="a2">
+  <h2><span class="num">A2.</span> Why This Change <span class="tier what">WHAT</span></h2>
+  <div class="expected"><strong>What is expected:</strong> Observable trigger, who is affected, cost of leaving it.</div>
+  <table>
+    <tr><th style="width:30%">Question</th><th>Answer</th></tr>
+    <tr><td>What's wrong with the current behaviour?</td><td>P74's fire path checks exactly one thing before acting — is the connection still in <code>PENDING_INSTALL</code> (<code>loadInState</code>). It has no idea whether the customer has already paid the security fee. A CSP who has done the most (submitted Aadhar, gotten the customer to pay, is actively on-site) is treated identically to a CSP who has done nothing at all — both are subject to the exact same 72h clock, and both can be reallocated (T3) or, after enough retries, have the connection deactivated outright (T12).</td></tr>
+    <tr><td>Who experiences it?</td><td><strong>CSPs</strong> who have already invested real effort risk losing the booking — reassigned to a different CSP who starts from scratch, or the connection cancelled entirely — purely because a blind timer expired, not because of anything the CSP did wrong. <strong>Customers</strong> who have already paid could see their install handed to a brand-new CSP with no context, or their connection deactivated, for a delay that isn't really abandonment. <strong>CSPs watching the home feed</strong> see a countdown ticking toward a removal that, once they've collected payment, should no longer be a real threat — creating confusion or unnecessary anxiety about a booking that's actually safe.</td></tr>
+    <tr><td>Cost of leaving it as-is?</td><td>This is a live, structural risk, not a hypothetical — nothing in the current code prevents a paid, invested connection from being pulled via P74. It's presumably rare in practice only because most connections that reach fee payment also complete quickly, not because there's any actual protection against it.</td></tr>
+  </table>
+  <hr class="sect-end">
+</section>
+
+<section class="spec" id="a5">
+  <h2><span class="num">A5.</span> The Delta <span class="tier what">WHAT</span></h2>
+  <div class="expected"><strong>What is expected:</strong> One row per atomic change: <em>what changes → before → after → why</em>.</div>
+  <table class="delta">
+    <thead><tr><th style="width:22%">What changes</th><th class="before" style="width:28%">Before</th><th class="after" style="width:28%">After</th><th>Why</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>New guard on P74's fire path — blocks both T3 and T12</td>
+        <td><code>SchedulingServiceImpl.processInstallTimeout()</code> only checks <code>loadInState()</code> (still <code>PENDING_INSTALL</code>) before raising <code>InstallationFailed</code>. <code>handleInstallationFailed()</code> unconditionally branches to T3 or T12 based only on retry count vs. P78 max — no business-condition check exists anywhere in this path today.</td>
+        <td>Before P74 is allowed to act (exact insertion point TBD — see Open Questions), CL checks whether the customer's security fee is <code>PAID</code> for the connection's associated TAS execution candidate. If <code>PAID</code>, P74 is a graceful no-op: <strong>neither T3 nor T12 fires</strong>, per explicit PM decision that a paid connection should not be automatically removed from the CSP at all — not reassigned, not deactivated.</td>
+        <td>Matches the base principle directly: once the fee is paid, real investment has already been made, and P74 should never be the reason that investment is voided.</td>
+      </tr>
+      <tr>
+        <td>New cross-service visibility — CL needs to know TAS's <code>securityFeeStatus</code></td>
+        <td>Confirmed via code search: zero references to security-fee tracking anywhere in <code>csp-connection-lifecycle-service</code>. CL has no field, no event subscription, no API call today that would tell it this status.</td>
+        <td><strong>Genuinely open architecture question, not decided here.</strong> Options include: (a) TAS publishes an outbox event on fee-paid that CL subscribes to and caches on its own connection entity; (b) CL makes a synchronous API call to TAS at guard-check time; (c) some other mechanism. See Open Questions in B5 — this is the single biggest unknown in this spec.</td>
+        <td>CL cannot check a condition it has no way to observe. This is new integration work, not a config tweak, and deserves a deliberate architecture decision rather than an assumed default.</td>
+      </tr>
+      <tr>
+        <td>Home-feed countdown timer disappears once the fee is paid</td>
+        <td><code>TasQueueCardUpstream.p74DeadlineAt</code> is always populated while the connection is in <code>PENDING_INSTALL</code>, regardless of fee status — the existing home-feed timer has no awareness of payment either.</td>
+        <td>TAS suppresses (nulls) <code>p74DeadlineAt</code> in its own queue-card upstream response once <code>securityFeeStatus == PAID</code> for the associated candidate. TAS already owns both the fee status and the field that feeds the gateway — this is a same-service change, unlike the guard above, and needs no new cross-service dependency.</td>
+        <td>A countdown timer counting toward a removal that can no longer happen is actively misleading. Once paid, there's nothing left to warn the CSP about via this mechanism.</td>
+      </tr>
+      <tr>
+        <td>Feature flag for the guard — open question, not committed</td>
+        <td>No existing flag infrastructure covers P74 at all today (consistent with SCHED-01's finding that P41 also has no flag).</td>
+        <td>Following the convention established in SCHED-01 (flags scoped to actions with real blast radius), this guard plausibly deserves one — e.g. <code>P74_SECURITY_FEE_GUARD_ENABLED</code> — since it changes both T3 and T12 behavior. Not committed here; flagged as an Open Question for PM/Engineering to confirm.</td>
+        <td>If the guard has an unforeseen bug (e.g. mis-detecting fee status), an independent kill switch would let it be disabled without touching P74's core retry logic.</td>
+      </tr>
+    </tbody>
+  </table>
+  <hr class="sect-end">
+</section>
+
+<section class="spec" id="workflow">
+  <h2><span class="num">WF.</span> Workflow — guard cascade <span class="tier what">WHAT</span></h2>
+  <div class="expected"><strong>What is expected:</strong> Sequence of what happens when P74 expires, with the new guard inserted.</div>
+
+  <h3>P74 fire path today, with the new guard's insertion point</h3>
+  <div class="mermaid">
+sequenceDiagram
+    autonumber
+    participant EB as EventBridge
+    participant Sched as SchedulingServiceImpl
+    participant Guard as New fee-status guard
+    participant TAS
+    participant Inbound as InboundEventProcessingServiceImpl
+
+    Note over EB,Sched: existing, unmodified - one-shot timer armed at PENDING_INSTALL entry
+    EB->>Sched: processInstallTimeout for connectionId
+    Sched->>Sched: loadInState - existing, unmodified - still PENDING_INSTALL
+    Sched->>Guard: NEW - is securityFeeStatus PAID for this connection's candidate
+    Guard->>TAS: read fee status - mechanism TBD, see Open Questions
+    alt fee is PAID
+      Guard->>Sched: NEW - block, do not raise InstallationFailed
+      Note over Sched: graceful no-op - no T3, no T12, existing pipeline never runs
+    else fee is not PAID
+      Sched->>Inbound: raise InstallationFailed - existing, unmodified
+      Inbound->>Inbound: check retry count vs P78 max - existing, unmodified
+      alt retry count at or above P78 max
+        Inbound->>Inbound: T12 - PENDING_INSTALL to PENDING_DEACTIVATION - existing, unmodified
+      else retry count below P78 max
+        Inbound->>Inbound: T3 - PENDING_INSTALL to REQUESTED - existing, unmodified
+      end
+    end
+  </div>
+  <div class="hint"><strong>Everything except the new Guard step is unchanged.</strong> The guard is a single new decision point inserted before the existing pipeline runs — it does not alter T3 or T12's own logic, only whether they get reached at all for a given connection.</div>
+
+  <h3>Home-feed timer suppression — same-service change in TAS, no new integration</h3>
+  <div class="mermaid">
+sequenceDiagram
+    autonumber
+    participant Pay as SuccessfulPaymentEventListener
+    participant TAS
+    participant Upstream as TasQueueCardUpstream
+    participant Gateway as HomeFeedService
+
+    Note over Pay,TAS: existing, unmodified - CustomerSecurityFeePaid sets securityFeeStatus to PAID
+    Pay->>TAS: CustomerSecurityFeePaid processed - existing, unmodified
+    TAS->>TAS: securityFeeStatus set to PAID - existing, unmodified
+    TAS->>Upstream: NEW - suppress p74DeadlineAt when securityFeeStatus is PAID
+    Upstream->>Gateway: p74DeadlineAt is null - existing wiring, unmodified, just receives a different value
+    Gateway->>Gateway: home feed shows no countdown - existing rendering, unmodified
+  </div>
+  <div class="hint">This half of the spec needs no cross-service work at all — TAS already owns both the fee status and the upstream field the gateway reads. The only new code is the suppression condition itself.</div>
+  <hr class="sect-end">
+</section>
+
+<section class="spec" id="wired">
+  <h2><span class="num">WR.</span> What's wired, what's not <span class="tier what">WHAT</span></h2>
+  <div class="expected"><strong>What is expected:</strong> Per-layer audit of what already exists vs. what this spec needs built.</div>
+  <table>
+    <thead><tr><th style="width:6%">#</th><th style="width:13%">Status</th><th style="width:24%">Layer</th><th>Where it is (or isn't)</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td><span class="status-pill wired">Wired</span></td><td>P74 arm/fire mechanism</td><td><code>ConnectionTimeoutScheduler.java:53-71</code> (arm), <code>SchedulingServiceImpl.java:52-71</code> (fire), <code>loadInState</code> ~L125-138 (only existing guard, state-based). All present and already exercised daily.</td></tr>
+      <tr><td>2</td><td><span class="status-pill wired">Wired</span></td><td>T3/T12 branch logic</td><td><code>InboundEventProcessingServiceImpl.handleInstallationFailed</code> (CL) ~L400-473. Retry-count-vs-P78 branch already live and unmodified by this spec.</td></tr>
+      <tr><td>3</td><td><span class="status-pill wired">Wired</span></td><td>Security fee status tracking (TAS)</td><td><code>SecurityFeeStatus</code> enum, <code>ExecutionCandidateEntity.securityFeeStatus</code> field, <code>CustomerSecurityFeePaid</code> event + listener, all confirmed live in TAS today. This spec only reads it — no change to how it's set.</td></tr>
+      <tr><td>4</td><td><span class="status-pill missing">Missing</span></td><td>CL visibility into TAS's fee status</td><td>Confirmed zero references to security-fee tracking anywhere in <code>csp-connection-lifecycle-service</code>. This is the central new-integration requirement of this spec — see A5 and Open Questions.</td></tr>
+      <tr><td>5</td><td><span class="status-pill missing">Missing</span></td><td>The guard logic itself (fee-status check before T3/T12)</td><td>No existing guard checks any business condition before P74 acts — only the state check in row 1. New logic, blocked on row 4's mechanism being decided first.</td></tr>
+      <tr><td>6</td><td><span class="status-pill missing">Missing</span></td><td><code>p74DeadlineAt</code> suppression in TAS's queue-card upstream</td><td>Today always populated while <code>PENDING_INSTALL</code>, regardless of fee status. Same-service change in TAS — no new integration needed, unlike row 4.</td></tr>
+      <tr><td>7</td><td><span class="status-pill missing">Missing</span></td><td>Feature flag for the guard</td><td>No flag infrastructure exists for P74 at all today. Whether this guard gets one is an Open Question, not committed.</td></tr>
+      <tr><td>8</td><td><span class="status-pill wired">Wired</span></td><td>Aadhar-precedes-fee-payment structural guarantee</td><td><code>InstallationGuards.enforceFeeBeforeSharedStep</code> ~L134-140 (invoked ~L227), combined with <code>StepSubmissionServiceImpl</code> setting fee status to <code>PENDING</code> only after Aadhar submission (~L171-172). Confirms checking fee status alone is sufficient — it structurally cannot be <code>PAID</code> without Aadhar already having happened.</td></tr>
+      <tr><td>9</td><td><span class="status-pill wired">Wired</span></td><td>Home-feed timer display mechanism</td><td><code>TaskCardResponse.p74_deadline_at</code>, <code>TasQueueCardUpstream.p74DeadlineAt</code>, <code>HomeFeedService.java:242</code> — already live in production. This spec only needs to change what value TAS supplies, not the display mechanism itself.</td></tr>
+    </tbody>
+  </table>
+  <hr class="sect-end">
+</section>
+
+<section class="spec" id="a8">
+  <h2><span class="num">A8.</span> OS Impact &amp; Sign-off <span class="tier guard">GATE</span></h2>
+  <div class="expected"><strong>What is expected:</strong> One row per OS plausibly in the blast radius.</div>
+  <table>
+    <thead><tr><th>OS</th><th>Impacted?</th><th>Notes</th><th>Owner (consulted)</th><th>Sign-off</th></tr></thead>
+    <tbody>
+      <tr><td>CL OS</td><td>Addition</td><td>P74's T3 and T12 both gain a new pre-condition (fee not paid). Neither transition's own mechanics change — only whether they're reached at all for a given connection. Needs the OS to formally record this pre-condition on both transitions.</td><td>CL OS owner</td><td><span class="badge pending">Pending</span></td></tr>
+      <tr><td>TAS OS</td><td>Addition / clarification</td><td><code>securityFeeStatus</code> becomes a cross-service-relevant field for the first time — previously TAS-internal. The <code>p74DeadlineAt</code> suppression is a new TAS-side behavior change, same-service, lower risk.</td><td>TAS OS owner</td><td><span class="badge pending">Pending</span></td></tr>
+      <tr><td>Platform / Shared-Services OS (cross-service visibility)</td><td>New — same class of question SCHED-01 raised</td><td>CL needs to observe a business fact TAS owns, with no existing mechanism for it. This is structurally the same problem as SCHED-01's "common scheduling engine" question — a service needing visibility into another service's state with no established pattern for how that should happen. Worth resolving as part of the same platform-architecture conversation rather than a one-off decision here.</td><td>Platform/Architecture owner (TBD — no existing owner identified, same as SCHED-01)</td><td><span class="badge pending">Pending</span></td></tr>
+      <tr><td>D&amp;A OS</td><td>No</td><td>D&amp;A is downstream of CL's T3 (reroute pipeline) — if the guard blocks T3 from firing at all, D&amp;A simply never receives that retry-intake event for this connection. No change to D&amp;A's own logic.</td><td>—</td><td>—</td></tr>
+    </tbody>
+  </table>
+  <hr class="sect-end">
+</section>
+
+<div class="part-divider how">
+  <div class="label">Part B</div>
+  <h2>HOW — Detailing</h2>
+  <p>Verification layer for engineering build and test.</p>
+  <div class="author-note">Authored alongside engineering. Evolves with implementation — currently a first pass.</div>
+</div>
+
+<section class="spec" id="b5">
+  <h2><span class="num">B5.</span> Acceptance Criteria — Verification Layer <span class="tier how">HOW</span></h2>
+  <div class="expected"><strong>What is expected:</strong> Given / When / Then blocks covering business logic and edge cases. Negative checks first-class on every block.</div>
+
+  <h3>Business logic</h3>
+  <div class="gherkin"><pre><span class="kw">LOGIC-1:</span> Fee already PAID when P74 expires — guard blocks both T3 and T12
+
+  <span class="kw">Given</span> a connection is in PENDING_INSTALL
+  <span class="kw">And</span>   the associated TAS execution candidate's securityFeeStatus is PAID
+  <span class="kw">When</span>  the P74 EventBridge timer fires
+  <span class="kw">Then</span>  the new guard detects PAID status and blocks the pipeline
+  <span class="kw">And</span>   InstallationFailed is never raised (or is raised but ignored downstream —
+        exact insertion point TBD, see Open Questions)
+  <span class="kw">And</span>   neither T3 nor T12 fires — the connection stays exactly as it is,
+        with the CSP still assigned
+
+  <span class="kw">Verify:</span>
+    • CL DB — connection current_state unchanged, still PENDING_INSTALL
+    • CL DB — no new connection_event_history row for this P74 expiry
+    • D&amp;A — confirm no retry-intake event was ever received for this connection
+    • Negative — repeat with retry_count already at or above P78 max (the T12 path);
+      confirm the guard blocks T12 identically to T3 — this must not only cover reallocation</pre></div>
+
+  <div class="gherkin"><pre><span class="kw">LOGIC-2:</span> Fee NOT paid when P74 expires — existing behavior is unchanged (regression check)
+
+  <span class="kw">Given</span> a connection is in PENDING_INSTALL
+  <span class="kw">And</span>   the associated TAS execution candidate's securityFeeStatus is PENDING or NOT_APPLICABLE
+  <span class="kw">When</span>  the P74 EventBridge timer fires
+  <span class="kw">Then</span>  the guard finds the fee is not PAID and does not block anything
+  <span class="kw">And</span>   InstallationFailed is raised exactly as it is today
+  <span class="kw">And</span>   T3 or T12 fires per the existing, unmodified retry-count-vs-P78 logic
+
+  <span class="kw">Verify:</span>
+    • Identical to today's live P74 behavior — this is a regression check, not new behavior
+    • Negative — confirm the guard adds no measurable delay to the fire path for the
+      common (not-yet-paid) case, since this runs on every single P74 expiry going forward</pre></div>
+
+  <div class="gherkin"><pre><span class="kw">LOGIC-3:</span> Home-feed countdown disappears once the fee is paid
+
+  <span class="kw">Given</span> a connection's home feed currently shows a P74 countdown (p74_deadline_at is set)
+  <span class="kw">When</span>  CustomerSecurityFeePaid is processed for the associated candidate
+  <span class="kw">Then</span>  TAS's queue-card upstream response for this candidate no longer includes
+        p74DeadlineAt (or includes it as null)
+  <span class="kw">And</span>   the home feed no longer shows a countdown for this task
+
+  <span class="kw">Verify:</span>
+    • Gateway API response — TaskCardResponse.p74_deadline_at is null/absent post-payment
+    • Negative — confirm this doesn't affect any other task card field or any other
+      connection's countdown
+    • Negative — confirm a connection whose fee is still PENDING keeps showing its
+      countdown exactly as before (no unintended suppression)</pre></div>
+
+  <div class="gherkin"><pre><span class="kw">LOGIC-4:</span> Race condition — fee paid at nearly the same moment P74 fires
+
+  <span class="kw">Given</span> a connection is in PENDING_INSTALL, fee status is PENDING
+  <span class="kw">And</span>   CustomerSecurityFeePaid and the P74 EventBridge callback arrive within
+        a short window of each other
+  <span class="kw">When</span>  the exact ordering is not guaranteed
+  <span class="kw">Then</span>  behavior is currently undefined — this is a genuine open edge case,
+        not asserted here (see Open Questions)
+
+  <span class="kw">Verify:</span>
+    • Not yet specified — needs an engineering decision on acceptable behavior for this
+      race (e.g. best-effort/rare-and-acceptable vs. a reconciliation step) before this
+      block can be completed</pre></div>
+
+  <div class="gherkin"><pre><span class="kw">LOGIC-5:</span> Already-armed P74 timers need no backfill
+
+  <span class="kw">Given</span> a connection entered PENDING_INSTALL, and its P74 timer was armed,
+        before this guard was deployed
+  <span class="kw">And</span>   its fee is later marked PAID before the timer fires
+  <span class="kw">When</span>  the already-armed timer fires after this guard is live
+  <span class="kw">Then</span>  the guard still applies — it checks fee status at fire time, not at arm time
+  <span class="kw">And</span>   no migration or backfill sweep is needed for in-flight connections
+
+  <span class="kw">Verify:</span>
+    • Confirm the guard reads current fee status live at fire time, not a value cached
+      when the timer was armed
+    • Negative — confirm this holds even for timers armed weeks before this guard shipped</pre></div>
+
+  <h3>Open questions for PM / Engineering (no silent defaults)</h3>
+  <table>
+    <thead><tr><th>Question</th><th>Best guess (needs confirmation)</th></tr></thead>
+    <tbody>
+      <tr><td>How should CL learn TAS's <code>securityFeeStatus</code> — an outbox event CL subscribes to and caches, a synchronous API call at guard-check time, or something else?</td><td>Not decided; this is the single biggest open item in this spec. An outbox-subscribed, locally-cached field avoids a synchronous cross-service call on every P74 fire (better for latency/availability), but introduces eventual-consistency risk (CL's cached copy could be briefly stale). A synchronous call is simpler and always current, but adds a hard runtime dependency on TAS being up whenever P74 fires. Needs an architecture review, not a PM guess.</td></tr>
+      <tr><td>Exact insertion point for the guard — before <code>InstallationFailed</code> is raised at all (in <code>processInstallTimeout</code>), or after, inside <code>handleInstallationFailed</code>?</td><td>Leaning toward blocking earlier, in <code>processInstallTimeout</code>, so no failure event is raised at all for a paid connection — cleaner audit trail (nothing to explain away) than raising-then-ignoring. Not confirmed with engineering.</td></tr>
+      <tr><td>Does this guard need its own feature flag, e.g. <code>P74_SECURITY_FEE_GUARD_ENABLED</code>?</td><td>Leaning yes, following the SCHED-01 convention for actions with real blast radius (this affects both T3 and T12). Not committed.</td></tr>
+      <tr><td>Race condition (LOGIC-4): fee paid at nearly the same moment P74 fires — is best-effort/rare-and-acceptable behavior fine, or does this need a reconciliation step (e.g. a compensating action if P74 fired just before the fee was marked paid)?</td><td>Not decided. Given this is a genuinely rare timing window, leaning toward accepting best-effort behavior unless engineering flags a reason not to — but not asserted as a decision here.</td></tr>
+      <tr><td>Should there be a new reason code or audit-log entry marking "P74 checked but guarded due to paid fee," for traceability — similar to how SCHED-01 introduced new reason codes for its RT triggers?</td><td>Not decided. Worth considering so the audit trail can distinguish "P74 never fired" from "P74 fired but was silently guarded" — but adds a new field/value that isn't currently specified.</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Out of scope for SCHED-02</h3>
+  <ul>
+    <li>Designing or building the CL–TAS cross-service visibility mechanism itself — this spec states the requirement and flags it for an architecture review (A8), the same way SCHED-01 flagged its common-scheduling-engine question, but does not design that integration here.</li>
+    <li>Any change to how the security fee is collected or how <code>securityFeeStatus</code> gets set — this spec is a read-only consumer of that existing field.</li>
+    <li>SCHED-01's own new RT/Nudge schedulers and their working-hours/home-feed-countdown work — a separate, already-published spec. This spec is additive and related in principle (both are about not removing a booking once real investment has happened) but does not modify SCHED-01's schedulers.</li>
+    <li>The race-condition handling in LOGIC-4 — flagged as an open question, not designed or committed to a specific resolution here.</li>
+  </ul>
+  <hr class="sect-end">
+</section>
+
+<footer class="checklist" id="checklist">
+  <h2>Completeness checklist</h2>
+  <table>
+    <thead><tr><th class="tier-cell">Tier</th><th>Item</th><th class="check">Done</th></tr></thead>
+    <tbody>
+      <tr><td><span class="badge light">Light</span></td><td>Quick Check filled (incl. tier)</td><td class="check">✓</td></tr>
+      <tr><td><span class="badge light">Light</span></td><td>Required sections (A1, A2, A5, A8, B5) filled</td><td class="check">✓ (with pending sub-items marked)</td></tr>
+      <tr><td><span class="badge light">Light</span></td><td>Negative checks present on every Verify block</td><td class="check">✓</td></tr>
+      <tr><td><span class="badge light">Light</span></td><td>Workflow diagrams present (guard cascade + home-feed suppression)</td><td class="check">✓</td></tr>
+      <tr><td><span class="badge light">Light</span></td><td>Wired-layers table present</td><td class="check">✓</td></tr>
+      <tr><td><span class="badge light">Light</span></td><td>Guard scope confirmed: blocks both T3 and T12, not just reallocation</td><td class="check">✓ — confirmed by PM</td></tr>
+      <tr><td><span class="badge light">Light</span></td><td>Guard is a no-op requiring no backfill for already-armed timers (LOGIC-5)</td><td class="check">✓</td></tr>
+      <tr><td><span class="badge pending">Medium</span></td><td>CL–TAS cross-service visibility mechanism decided</td><td class="check">Pending</td></tr>
+      <tr><td><span class="badge light">Light</span></td><td>Exact guard insertion point confirmed with engineering</td><td class="check">Pending</td></tr>
+      <tr><td><span class="badge light">Light</span></td><td>Feature flag decision made</td><td class="check">Pending</td></tr>
+      <tr><td><span class="badge light">Light</span></td><td>Race-condition (LOGIC-4) behavior decided</td><td class="check">Pending</td></tr>
+      <tr><td><span class="badge light">Light</span></td><td>Every A8 row has sign-off received</td><td class="check">Pending</td></tr>
+    </tbody>
+  </table>
+  <div class="note"><strong>Code + schema evidence:</strong>
+    <ul>
+      <li><strong>P74 arm:</strong> <code>ConnectionTimeoutScheduler.java:53-71</code> (csp-connection-lifecycle-service) — timer mapping ~L84, schedule call ~L61/L94.</li>
+      <li><strong>P74 fire + only existing guard:</strong> <code>SchedulingServiceImpl.java</code>, <code>processInstallTimeout</code> ~L52-71, <code>loadInState</code> ~L125-138 (state check only — no business-condition check exists today).</li>
+      <li><strong>T3/T12 branch:</strong> <code>InboundEventProcessingServiceImpl.java</code> (csp-connection-lifecycle-service), <code>handleInstallationFailed</code> ~L400-473, retry-count check ~L417, T12 ~L419-441, T3 ~L446-472.</li>
+      <li><strong>Security fee tracking:</strong> <code>SecurityFeeStatus.java:4-8</code> (enum), <code>ExecutionCandidateEntity.java:257</code> (field), <code>CustomerSecurityFeePaid.java</code> (inbound event), <code>SuccessfulPaymentEventListener.java:48-217</code>, TAS <code>InboundEventProcessingServiceImpl.process(CustomerSecurityFeePaid)</code> ~L692-722+. Confirmed via search: zero references anywhere in csp-connection-lifecycle-service.</li>
+      <li><strong>Aadhar-precedes-fee guarantee:</strong> <code>InstallStepName.java:6-13</code> (AADHAR = step 2), <code>StepSubmissionServiceImpl.java</code> ~L145-200 (step handler, PENDING set ~L171-172), <code>InstallationGuards.java</code> <code>enforceFeeBeforeSharedStep</code> ~L134-140 (invoked ~L227).</li>
+      <li><strong>Home-feed timer, already live:</strong> <code>TaskCardResponse.java:30-32</code> (<code>p74_deadline_at</code>), <code>TasQueueCardUpstream.java:44-46</code> (<code>p74DeadlineAt</code>), <code>HomeFeedService.java:242</code> — code comment: "GAP-06; INSTALL-only, CL-authored."</li>
+    </ul>
+  </div>
+</footer>
+
+<section class="spec" id="changelog" style="margin-top: 56px;">
+  <h2>Changelog</h2>
+  <table>
+    <thead><tr><th>Version</th><th>Date</th><th>Author</th><th>Section(s)</th><th>Change &amp; rationale</th><th>Approver</th></tr></thead>
+    <tbody>
+      <tr><td>v0.1</td><td>2026-07-13</td><td>Ashish Raj</td><td>All</td><td>Initial draft. Adds a guard to P74's fire path — once the customer's security fee is <code>PAID</code>, neither reallocation (T3) nor deactivation-after-retries (T12) fires, per explicit PM decision covering both transitions, not just reallocation. Also removes the existing home-feed <code>p74_deadline_at</code> countdown once paid, since TAS already owns both the fee status and the field that drives it — a same-service change needing no new integration. Grounded throughout in a direct code trace of P74's arm/fire/branch logic (CL), the security-fee tracking mechanism (TAS, confirmed CL has zero visibility into it today), and the structural guarantee that Aadhar entry always precedes fee payment (resolving, via code evidence rather than assumption, whether checking fee status alone is sufficient versus needing a separate Aadhar check too). Flags the CL–TAS cross-service visibility mechanism as the single biggest open architecture question — the same class of problem SCHED-01 raised for its common scheduling engine — rather than assuming an answer. Also open: exact guard insertion point, feature-flag decision, and race-condition handling when fee payment and P74 expiry land close together in time.</td><td>Pending</td></tr>
+    </tbody>
+  </table>
+</section>
+
+</main>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<script>
+  if (typeof mermaid !== 'undefined') {
+    mermaid.initialize({ startOnLoad: true, theme: 'neutral', securityLevel: 'loose', flowchart: { curve: 'basis' } });
+  }
+</script>
+</body>
+</html>
