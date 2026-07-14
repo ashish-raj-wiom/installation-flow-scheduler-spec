@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Installation Nudges — Push Notification coverage · Change Spec</title>
+<style>
+  :root {
+    --bg: #fafaf9; --surface: #ffffff; --ink: #1a1a1a; --muted: #6b6b6b; --rule: #e5e5e2;
+    --core: #0b6b3a; --core-bg: #e9f5ee;
+    --cond: #8a5a00; --cond-bg: #fbf1dd;
+    --what: #1f3c6e; --what-bg: #e8eef8;
+    --how: #5b2a86; --how-bg: #efe6f7;
+    --guard: #b91c1c; --guard-bg: #fee2e2;
+    --required: #b91c1c; --required-bg: #fee2e2;
+    --illustrative: #6b7280; --illustrative-bg: #f1f3f5;
+    --quickcheck-bg: #fef9c3; --quickcheck-rule: #ca8a04; --quickcheck-ink: #713f12;
+    --hint-bg: #ecfeff; --hint-rule: #0e7490; --hint-ink: #155e75;
+    --delta-bg: #eef6ff; --delta-rule: #1f3c6e;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Inter", "Helvetica Neue", Arial, sans-serif; font-size: 15px; line-height: 1.55; color: var(--ink); background: var(--bg); }
+  .layout { display: grid; grid-template-columns: 280px 1fr; min-height: 100vh; }
+  nav.toc { position: sticky; top: 0; align-self: start; height: 100vh; overflow-y: auto; padding: 24px 18px; border-right: 1px solid var(--rule); background: var(--surface); font-size: 13px; }
+  nav.toc h2 { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin: 18px 0 6px; }
+  nav.toc h2:first-of-type { margin-top: 0; }
+  nav.toc h2.qc { color: var(--quickcheck-ink); border-left: 3px solid var(--quickcheck-rule); padding-left: 8px; }
+  nav.toc h2.what { color: var(--what); border-left: 3px solid var(--what); padding-left: 8px; }
+  nav.toc h2.how { color: var(--how); border-left: 3px solid var(--how); padding-left: 8px; }
+  nav.toc h2.close { color: var(--muted); border-left: 3px solid var(--muted); padding-left: 8px; }
+  nav.toc ol { list-style: none; padding: 0; margin: 0; }
+  nav.toc li { margin: 4px 0; }
+  nav.toc li a { text-decoration: none; color: var(--ink); display: flex; gap: 8px; align-items: baseline; padding: 4px 6px; border-radius: 4px; font-size: 12.5px; }
+  nav.toc li a:hover { background: var(--bg); }
+  nav.toc li a .ix { color: var(--muted); font-variant-numeric: tabular-nums; min-width: 32px; font-weight: 600; }
+  nav.toc .back { display: block; margin-top: 24px; padding: 8px; font-size: 12px; color: var(--muted); border-top: 1px solid var(--rule); padding-top: 14px; text-decoration: none; }
+  nav.toc .back:hover { color: var(--ink); }
+  main { padding: 40px 56px 120px; max-width: 980px; }
+  header.doc { border-bottom: 2px solid var(--ink); padding-bottom: 20px; margin-bottom: 32px; }
+  header.doc .eyebrow { font-size: 12px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); }
+  header.doc h1 { font-size: 30px; margin: 6px 0 8px; line-height: 1.2; }
+  header.doc p.lede { color: var(--muted); font-size: 15px; margin: 0; max-width: 70ch; }
+  header.doc .meta-row { display: flex; gap: 24px; margin-top: 14px; font-size: 13px; color: var(--muted); flex-wrap: wrap; }
+  .convention { margin-top: 14px; padding: 12px 14px; background: var(--bg); border: 1px dashed var(--rule); border-radius: 5px; font-size: 13px; }
+  .convention .badge { display: inline-block; padding: 2px 7px; border-radius: 3px; font-size: 10px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; margin: 0 4px; vertical-align: middle; }
+  .badge.light { background: var(--core-bg); color: var(--core); }
+  .badge.req { background: var(--required-bg); color: var(--required); }
+  .badge.pending { background: var(--cond-bg); color: var(--cond); }
+  .quickcheck { margin: 28px 0 40px; background: var(--quickcheck-bg); border: 1px solid var(--quickcheck-rule); border-left: 5px solid var(--quickcheck-rule); border-radius: 6px; padding: 18px 22px; }
+  .quickcheck h2 { margin: 0 0 4px; font-size: 13px; text-transform: uppercase; letter-spacing: 0.12em; color: var(--quickcheck-ink); }
+  .quickcheck .qc-tag { font-size: 11px; color: var(--quickcheck-ink); opacity: 0.9; margin-bottom: 12px; }
+  .quickcheck dl { margin: 0; display: grid; grid-template-columns: max-content 1fr; gap: 6px 18px; font-size: 14px; }
+  .quickcheck dt { font-weight: 600; color: var(--quickcheck-ink); }
+  .quickcheck dd { margin: 0; color: var(--ink); }
+  .part-divider { margin: 56px 0 32px; padding: 28px 32px; border-radius: 8px; color: white; }
+  .part-divider.what { background: var(--what); }
+  .part-divider.how { background: var(--how); }
+  .part-divider .label { font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; opacity: 0.8; }
+  .part-divider h2 { font-size: 28px; margin: 4px 0 6px; color: white; }
+  .part-divider p { margin: 0; font-size: 14px; opacity: 0.92; max-width: 70ch; }
+  .part-divider .author-note { margin-top: 12px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.25); font-size: 13px; font-style: italic; opacity: 0.92; }
+  section.spec { margin: 40px 0; scroll-margin-top: 24px; }
+  section.spec h2 { font-size: 21px; margin: 0 0 6px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  section.spec h2 .num { color: var(--muted); font-weight: 600; font-variant-numeric: tabular-nums; }
+  section.spec h3 { font-size: 15px; margin: 16px 0 4px; }
+  .tier { font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; padding: 3px 8px; border-radius: 3px; font-weight: 600; }
+  .tier.what { background: var(--what-bg); color: var(--what); }
+  .tier.how { background: var(--how-bg); color: var(--how); }
+  .tier.guard { background: var(--guard-bg); color: var(--guard); }
+  .expected { background: #f4f4f2; border-left: 3px solid var(--ink); padding: 10px 14px; font-size: 13px; margin: 10px 0 14px; color: #333; }
+  .expected strong { font-weight: 700; }
+  .hint { background: var(--hint-bg); border-left: 3px solid var(--hint-rule); padding: 8px 14px; font-size: 13px; margin: 8px 0 14px; color: var(--hint-ink); border-radius: 4px; }
+  .row-mode { display: inline-block; margin: 6px 0 4px; padding: 3px 9px; border-radius: 3px; font-size: 11px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; }
+  .row-mode.req { background: var(--required-bg); color: var(--required); }
+  table { width: 100%; border-collapse: collapse; margin: 8px 0 14px; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px; border: 1px solid var(--rule); vertical-align: top; }
+  th { background: var(--bg); font-weight: 600; }
+  code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.86em; background: var(--bg); padding: 0.08em 0.32em; border-radius: 3px; border: 1px solid var(--rule); }
+  table.delta th.before { background: #f3f4f6; }
+  table.delta th.after { background: var(--delta-bg); color: var(--delta-rule); }
+  .gherkin { background: var(--surface); border: 1px solid var(--rule); border-left: 3px solid var(--core); padding: 12px 14px; margin: 10px 0; font-size: 13.5px; }
+  .gherkin pre { background: none; border: none; padding: 0; margin: 0; font-size: inherit; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; white-space: pre-wrap; }
+  .gherkin .kw { font-weight: 700; color: var(--core); }
+  table.coverage th { background: var(--bg); }
+  table.coverage td.cls { font-weight: 600; }
+  hr.sect-end { border: none; border-top: 1px dashed var(--rule); margin: 32px 0 0; }
+  footer.checklist { margin-top: 60px; padding-top: 30px; border-top: 2px solid var(--ink); }
+  footer.checklist h2 { font-size: 20px; margin-top: 0; }
+  footer.checklist table { font-size: 13.5px; }
+  footer.checklist td.tier-cell { width: 110px; }
+  footer.checklist td.check { width: 80px; text-align: center; font-family: monospace; }
+  footer.note { margin-top: 24px; padding: 14px; background: var(--bg); border-left: 3px solid var(--ink); font-size: 13px; }
+  .status-pill { display: inline-block; font-weight: 700; padding: 2px 8px; border-radius: 3px; font-size: 11px; }
+  .status-pill.wired { background: #e9f5ee; color: #0b6b3a; }
+  .status-pill.missing { background: #fee2e2; color: #b91c1c; }
+  .status-pill.partial { background: #fbf1dd; color: #8a5a00; }
+  @media print {
+    nav.toc { display: none; }
+    .layout { grid-template-columns: 1fr; }
+    main { padding: 20px; max-width: none; }
+    section.spec, .part-divider, .quickcheck { page-break-inside: avoid; }
+  }
+  @media (max-width: 900px) {
+    .layout { grid-template-columns: 1fr; }
+    nav.toc { position: static; height: auto; border-right: none; border-bottom: 1px solid var(--rule); }
+    main { padding: 24px; }
+  }
+</style>
+</head>
+<body>
+<div class="layout">
+
+<nav class="toc" aria-label="Table of contents">
+  <h2 class="qc">Quick Check</h2>
+  <ol><li><a href="#quickcheck"><span class="ix">QC.</span>7-line triage</a></li></ol>
+  <h2 class="what">Part A — WHAT (the change)</h2>
+  <ol>
+    <li><a href="#objective"><span class="ix">—</span>Objective</a></li>
+    <li><a href="#a1"><span class="ix">A1.</span>Metadata</a></li>
+    <li><a href="#a2"><span class="ix">A2.</span>Why this change</a></li>
+    <li><a href="#a5"><span class="ix">A5.</span>The delta — 5 use cases</a></li>
+    <li><a href="#workflow"><span class="ix">WF.</span>Workflow</a></li>
+    <li><a href="#a8"><span class="ix">A8.</span>OS impact &amp; sign-off</a></li>
+  </ol>
+  <h2 class="how">Part B — HOW (detailing)</h2>
+  <ol>
+    <li><a href="#b5"><span class="ix">B5.</span>Acceptance criteria (verification)</a></li>
+  </ol>
+  <h2 class="close">Closeout</h2>
+  <ol>
+    <li><a href="#checklist"><span class="ix">—</span>Completeness checklist</a></li>
+    <li><a href="#changelog"><span class="ix">—</span>Changelog</a></li>
+  </ol>
+  <a class="back" href="./index.html">← Scheduler spec index</a>
+</nav>
+
+<main>
+
+<header class="doc">
+  <div class="eyebrow">Wiom · Change Spec · v0.1 (draft) · PM deliverable</div>
+  <h1>Installation nudges — Push Notification coverage</h1>
+  <p class="lede"><strong>Objective:</strong> five install-flow conditions today only surface to the CSP via the in-app Attention Model (the Updates section) — which the CSP only sees if they happen to open the app. This spec adds a Push Notification for each of the five, so the CSP is proactively told, not just passively shown. This is a business-requirement spec only — use cases and target state, not implementation detail.</p>
+  <div class="meta-row">
+    <span><strong>Author:</strong> Ashish Raj &nbsp;·&nbsp; <strong>Reviewer:</strong> Engineering (pending) &nbsp;·&nbsp; <strong>Tier:</strong> Light</span>
+  </div>
+  <div class="convention">
+    <strong>Tier:</strong>
+    <span class="badge light">Light</span> — comms-only, no state changes, no reallocation logic. <strong>Status:</strong> <span class="badge pending">Draft, under active audit</span>.
+    <br><strong>Rows:</strong> <span class="badge req">Required</span> — every row filled or marked pending with a reason.
+  </div>
+</header>
+
+<aside class="quickcheck" id="quickcheck" aria-label="Quick check summary">
+  <h2>Quick Check</h2>
+  <div class="qc-tag">7-line triage.</div>
+  <dl>
+    <dt>What is changing?</dt>
+    <dd>Five install-flow use cases (below) get a Push Notification via CleverTap. The Attention Model (Updates section) already covers 4 of the 5 today; the 5th needs an Attention Model update added too. No state changes, no reallocation — this is nudge/notification coverage only.</dd>
+    <dt>What triggered it?</dt>
+    <dd>Business requirement: CSPs are missing time-sensitive install steps because today's only signal (the Updates section) is passive — visible only if the CSP opens the app. A push closes that gap.</dd>
+    <dt>Blast radius</dt>
+    <dd>CSP app (Attention Model / Updates section — one new entry, 4 already exist) · CleverTap (5 new Push Notification campaigns, built and owned on the CleverTap side once the triggering event is available).</dd>
+    <dt>Reversible?</dt>
+    <dd>Yes — each is an independent push; any one can be turned off without touching the others or any state logic.</dd>
+    <dt>Money / PII / migration?</dt>
+    <dd>No money movement. No PII beyond what's already shown to the CSP in-app today. No migration.</dd>
+    <dt>OS impact / sign-off?</dt>
+    <dd><span class="badge pending">Pending</span> — see A8. Comms-only; no CL/D&amp;A impact.</dd>
+    <dt>Tier</dt>
+    <dd>Light</dd>
+  </dl>
+</aside>
+
+<div class="part-divider what">
+  <div class="label">Part A</div>
+  <h2>WHAT — The Change</h2>
+  <p>The PM's decisions: why, what the new flow looks like, what changes service-by-service.</p>
+  <div class="author-note">Authored by the PM. Changes here trigger re-review.</div>
+</div>
+
+<section class="spec" id="objective">
+  <h2><span class="num">—</span> Objective <span class="tier what">WHAT</span></h2>
+  <p>Five points in the install flow are time-sensitive enough that the CSP should be told proactively, not left to discover them by opening the app. Today, the Attention Model (Updates section) already covers four of these five — but it's a passive surface. None of the five currently send a Push Notification.</p>
+  <p>This spec's scope is narrow and deliberate: it covers only these five nudges. It does not cover, and does not change, the separate reallocation/retrigger mechanism (RT) that moves a booking to a new CSP after a longer timeout — that is a different, already-published spec. Nothing here changes any install state.</p>
+</section>
+
+<section class="spec" id="a1">
+  <h2><span class="num">A1.</span> Metadata <span class="tier what">WHAT</span></h2>
+  <div class="expected"><strong>What is expected:</strong> Title, owner, status, version, baseline.</div>
+  <table>
+    <tr><th style="width:28%">Field</th><th>Value</th></tr>
+    <tr><td>Change title</td><td>Installation nudges — Push Notification coverage (5 use cases)</td></tr>
+    <tr><td>Owner (PM)</td><td>Ashish Raj</td></tr>
+    <tr><td>Status</td><td>Draft — under active audit by PM</td></tr>
+    <tr><td>Version</td><td>v0.1 (2026-07-14)</td></tr>
+    <tr><td>Baseline</td><td>Business requirement as given (see A5). Attention Model = the CSP app's Updates section, already live for 4 of the 5 use cases. Push Notification = CleverTap, not live for any of the 5 today.</td></tr>
+  </table>
+  <hr class="sect-end">
+</section>
+
+<section class="spec" id="a2">
+  <h2><span class="num">A2.</span> Why This Change <span class="tier what">WHAT</span></h2>
+  <div class="expected"><strong>What is expected:</strong> Observable trigger, who is affected, cost of leaving it.</div>
+  <table>
+    <tr><th style="width:30%">Question</th><th>Answer</th></tr>
+    <tr><td>What's wrong with the current behaviour?</td><td>For 4 of the 5 use cases, the only signal today is an Attention Model entry in the Updates section — the CSP has to open the app to see it. For the 5th (Arrived at Site, no fee paid), there isn't even that. None of the 5 send a push.</td></tr>
+    <tr><td>Who experiences it?</td><td>CSPs who don't happen to open the app during the window that matters — a slot that should've been proposed, a technician that should've been assigned, an OTP that should've been collected — miss the signal entirely until it's noticed some other way (or not at all).</td></tr>
+    <tr><td>Cost of leaving it as-is?</td><td>Time-sensitive install steps slip further than they need to, purely because the CSP wasn't told proactively.</td></tr>
+  </table>
+  <hr class="sect-end">
+</section>
+
+<section class="spec" id="a5">
+  <h2><span class="num">A5.</span> The Delta — 5 Use Cases <span class="tier what">WHAT</span></h2>
+  <div class="expected"><strong>What is expected:</strong> The five required nudges, current state vs. target state. This table is the spec — everything else in this document supports it.</div>
+  <table class="delta">
+    <thead><tr><th style="width:30%">Use case</th><th class="before" style="width:22%">Before (today)</th><th class="after" style="width:22%">After (this spec)</th><th>Why</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>Slot Not Proposed within 1 hr</td>
+        <td>Attention Model: yes<br>Push Notification: no</td>
+        <td>Attention Model: yes (unchanged)<br>Push Notification: <strong>yes (new)</strong></td>
+        <td>CSP should be proactively told a slot proposal is overdue, not just shown it if they open the app.</td>
+      </tr>
+      <tr>
+        <td>Customer Confirmed but technician not assigned within 1 hr</td>
+        <td>Attention Model: yes<br>Push Notification: no</td>
+        <td>Attention Model: yes (unchanged)<br>Push Notification: <strong>yes (new)</strong></td>
+        <td>Same gap — the customer is waiting on a technician assignment the CSP hasn't made yet.</td>
+      </tr>
+      <tr>
+        <td>Technician Assigned but work not started on Slot day</td>
+        <td>Attention Model: yes<br>Push Notification: no</td>
+        <td>Attention Model: yes (unchanged)<br>Push Notification: <strong>yes (new)</strong></td>
+        <td>Slot day is here and work hasn't started — the CSP needs to know now, not whenever they next open the app.</td>
+      </tr>
+      <tr>
+        <td>Arrived at Site but no Fee Paid within 2 hrs</td>
+        <td>Attention Model: no<br>Push Notification: no</td>
+        <td>Attention Model: <strong>yes (new)</strong><br>Push Notification: <strong>yes (new)</strong></td>
+        <td>Currently has no signal at all, on either surface — both need to be added.</td>
+      </tr>
+      <tr>
+        <td>Awaiting OTP if Happy Code is not entered within 4 hrs</td>
+        <td>Attention Model: yes<br>Push Notification: no</td>
+        <td>Attention Model: yes (unchanged)<br>Push Notification: <strong>yes (new)</strong></td>
+        <td>The install is one step from done — the CSP should be pushed to close it out, not just shown a reminder in-app.</td>
+      </tr>
+    </tbody>
+  </table>
+  <hr class="sect-end">
+</section>
+
+<section class="spec" id="workflow">
+  <h2><span class="num">WF.</span> Workflow <span class="tier what">WHAT</span></h2>
+  <div class="expected"><strong>What is expected:</strong> The high-level path from condition met to CSP notified — business level only, no implementation detail.</div>
+  <div class="mermaid">
+flowchart LR
+    A[Use case condition is met] --> B[Attention Model updated - existing for 4 of 5, new for 1]
+    A --> C[CSP backend sends an event]
+    C --> D[CleverTap]
+    D --> E[Push Notification campaign fires]
+  </div>
+  <div class="hint">CSP backend's job (per use case): make sure the condition is checked and, when met, an event is sent that CleverTap can act on. CleverTap's job: the campaign itself — copy, timing, targeting — is owned and built on the CleverTap side once the event is available. This spec does not define campaign content.</div>
+  <hr class="sect-end">
+</section>
+
+<section class="spec" id="a8">
+  <h2><span class="num">A8.</span> OS Impact &amp; Sign-off <span class="tier guard">GATE</span></h2>
+  <div class="expected"><strong>What is expected:</strong> One row per OS plausibly in the blast radius.</div>
+  <table>
+    <thead><tr><th>OS</th><th>Impacted?</th><th>Notes</th><th>Owner (consulted)</th><th>Sign-off</th></tr></thead>
+    <tbody>
+      <tr><td>CL OS</td><td>No</td><td>No state changes — comms only.</td><td>—</td><td>—</td></tr>
+      <tr><td>D&amp;A OS</td><td>No</td><td>No reallocation involved — that's the separate RT spec, out of scope here.</td><td>—</td><td>—</td></tr>
+      <tr><td>TAS OS</td><td>Addition</td><td>Needs to send an event for each of the 5 use cases so CleverTap has something to trigger on.</td><td>TAS OS owner</td><td><span class="badge pending">Pending</span></td></tr>
+      <tr><td>CleverTap / Growth</td><td>Addition</td><td>5 new Push Notification campaigns to be built once the triggering event exists per use case.</td><td>Growth/CRM owner</td><td><span class="badge pending">Pending</span></td></tr>
+    </tbody>
+  </table>
+  <hr class="sect-end">
+</section>
+
+<div class="part-divider how">
+  <div class="label">Part B</div>
+  <h2>HOW — Detailing</h2>
+  <p>Verification layer for engineering build and test.</p>
+  <div class="author-note">Authored alongside engineering. Evolves with implementation — currently a first pass.</div>
+</div>
+
+<section class="spec" id="b5">
+  <h2><span class="num">B5.</span> Acceptance Criteria — Verification Layer <span class="tier how">HOW</span></h2>
+  <div class="expected"><strong>What is expected:</strong> Given / When / Then per use case, business level only.</div>
+
+  <div class="gherkin"><pre><span class="kw">LOGIC-1:</span> Slot Not Proposed within 1 hr
+
+  <span class="kw">Given</span> a candidate is assigned to a CSP and no slot has been proposed
+  <span class="kw">When</span>  1 hour passes with no slot proposed
+  <span class="kw">Then</span>  the Attention Model update fires (unchanged)
+  <span class="kw">And</span>   a Push Notification is sent to the CSP (new)</pre></div>
+
+  <div class="gherkin"><pre><span class="kw">LOGIC-2:</span> Customer Confirmed but technician not assigned within 1 hr
+
+  <span class="kw">Given</span> the customer has confirmed the slot and no technician is assigned
+  <span class="kw">When</span>  1 hour passes with no technician assigned
+  <span class="kw">Then</span>  the Attention Model update fires (unchanged)
+  <span class="kw">And</span>   a Push Notification is sent to the CSP (new)</pre></div>
+
+  <div class="gherkin"><pre><span class="kw">LOGIC-3:</span> Technician Assigned but work not started on Slot day
+
+  <span class="kw">Given</span> a technician is assigned and today is the slot day
+  <span class="kw">When</span>  work has not started on the slot day
+  <span class="kw">Then</span>  the Attention Model update fires (unchanged)
+  <span class="kw">And</span>   a Push Notification is sent to the CSP (new)</pre></div>
+
+  <div class="gherkin"><pre><span class="kw">LOGIC-4:</span> Arrived at Site but no Fee Paid within 2 hrs
+
+  <span class="kw">Given</span> the CSP has marked arrival and the fee is not yet paid
+  <span class="kw">When</span>  2 hours pass with the fee still not paid
+  <span class="kw">Then</span>  an Attention Model update fires (new)
+  <span class="kw">And</span>   a Push Notification is sent to the CSP (new)</pre></div>
+
+  <div class="gherkin"><pre><span class="kw">LOGIC-5:</span> Awaiting OTP if Happy Code is not entered within 4 hrs
+
+  <span class="kw">Given</span> the install is awaiting the customer's Happy Code / OTP
+  <span class="kw">When</span>  4 hours pass with the code not entered
+  <span class="kw">Then</span>  the Attention Model update fires (unchanged)
+  <span class="kw">And</span>   a Push Notification is sent to the CSP (new)</pre></div>
+
+  <h3>Open questions for PM / Engineering (no silent defaults)</h3>
+  <table>
+    <thead><tr><th>Question</th><th>Best guess (needs confirmation)</th></tr></thead>
+    <tbody>
+      <tr><td>Use cases 1, 2, and 5 already have an Attention Model update today with no event sent anywhere. Does enabling their Push Notification mean CSP backend needs to add a new event-send to that existing logic, alongside use cases 3 and 4?</td><td>Yes, assumed — all 5 need an event sent for CleverTap to act on. Confirm this covers all 5, not just the two that may already be closer to it.</td></tr>
+      <tr><td>Use case 3 says "not started on Slot day" — is this a fixed check at a specific time on the slot day, or a fixed number of hours after technician assignment (matching the "within N hrs" pattern of the other four)?</td><td>Not decided — needs a precise rule from PM before engineering can build the check.</td></tr>
+      <tr><td>Use case 4 covers the period from arrival until the fee is paid — does the 2-hour check need to keep counting across any sub-steps the CSP completes on-site before the fee is actually paid, or does it reset if the CSP makes progress?</td><td>Not decided — needs a precise rule from PM.</td></tr>
+      <tr><td>Push Notification copy, timing/quiet-hours, and targeting rules per use case</td><td>Owned by CleverTap/Growth, not defined in this spec.</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Out of scope</h3>
+  <ul>
+    <li>The reallocation/retrigger (RT) mechanism for any of these install states — a separate, already-published spec. Nothing here changes install state or reallocation behavior.</li>
+    <li>Push Notification campaign content, timing, and targeting — owned on the CleverTap side.</li>
+    <li>Any change to how the Attention Model itself works for the 4 use cases that already have it — only use case 4 needs a new Attention Model entry.</li>
+  </ul>
+  <hr class="sect-end">
+</section>
+
+<footer class="checklist" id="checklist">
+  <h2>Completeness checklist</h2>
+  <table>
+    <thead><tr><th class="tier-cell">Tier</th><th>Item</th><th class="check">Done</th></tr></thead>
+    <tbody>
+      <tr><td><span class="badge light">Light</span></td><td>Quick Check filled (incl. tier)</td><td class="check">✓</td></tr>
+      <tr><td><span class="badge light">Light</span></td><td>All 5 use cases captured in the Delta table with before/after state</td><td class="check">✓</td></tr>
+      <tr><td><span class="badge light">Light</span></td><td>Gherkin coverage for all 5 use cases</td><td class="check">✓</td></tr>
+      <tr><td><span class="badge light">Light</span></td><td>Scope boundary vs. the RT/retrigger spec stated explicitly</td><td class="check">✓</td></tr>
+      <tr><td><span class="badge pending">Medium</span></td><td>Use case 3 (Slot day) and use case 4 (fee-paid window) precise timing rules confirmed</td><td class="check">Pending</td></tr>
+      <tr><td><span class="badge light">Light</span></td><td>Every A8 row has sign-off received</td><td class="check">Pending</td></tr>
+    </tbody>
+  </table>
+</footer>
+
+<section class="spec" id="changelog" style="margin-top: 56px;">
+  <h2>Changelog</h2>
+  <table>
+    <thead><tr><th>Version</th><th>Date</th><th>Author</th><th>Section(s)</th><th>Change &amp; rationale</th><th>Approver</th></tr></thead>
+    <tbody>
+      <tr><td>v0.1</td><td>2026-07-14</td><td>Ashish Raj</td><td>All</td><td>Initial draft. Documents 5 required install-flow nudges and adds Push Notification coverage to all 5 (via CleverTap), plus a new Attention Model entry for the one use case (Arrived at Site, no fee paid) that doesn't have one today. Business-requirement level only, by design — no backend implementation detail. Scoped explicitly away from the separate RT/reallocation (retrigger) mechanism. Three open questions left for PM/Engineering rather than assumed: whether all 5 use cases need a new event-send (not just the newer two), the exact timing rule for "not started on Slot day," and whether the fee-paid window resets on CSP progress.</td><td>Pending</td></tr>
+    </tbody>
+  </table>
+</section>
+
+</main>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<script>
+  if (typeof mermaid !== 'undefined') {
+    mermaid.initialize({ startOnLoad: true, theme: 'neutral', securityLevel: 'loose', flowchart: { curve: 'basis' } });
+  }
+</script>
+</body>
+</html>
