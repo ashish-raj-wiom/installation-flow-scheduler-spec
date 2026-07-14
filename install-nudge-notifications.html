@@ -249,6 +249,7 @@
       </tr>
     </tbody>
   </table>
+  <div class="hint"><strong>Rule that applies to all 5 (not per-row):</strong> a nudge — Attention Model or Push Notification — must never fire once the task is no longer active, i.e. it's been cancelled, declined, or failed before the nudge's window elapsed. Verified already true today: every cancellation/decline/failure path clears all pending reminders for that task immediately, and there's a second check at fire time that no-ops a reminder if the task has moved on. No new work needed here — flagged so it's an explicit, confirmed requirement rather than an assumption.</div>
   <hr class="sect-end">
 </section>
 
@@ -327,6 +328,15 @@ flowchart LR
   <span class="kw">Then</span>  the Attention Model update fires (unchanged)
   <span class="kw">And</span>   a Push Notification is sent to the CSP (new)</pre></div>
 
+  <div class="gherkin"><pre><span class="kw">LOGIC-6:</span> Cancelled / declined / failed task sends no nudge (regression check, applies to all 5)
+
+  <span class="kw">Given</span> a task would otherwise hit one of the 5 nudge conditions above
+  <span class="kw">And</span>   the task is cancelled, declined, or failed before that window elapses
+  <span class="kw">When</span>  the nudge's window would have elapsed
+  <span class="kw">Then</span>  no Attention Model update fires for it
+  <span class="kw">And</span>   no Push Notification is sent for it
+  <span class="kw">And</span>   this holds even if the cancellation lands right before the nudge's window ends</pre></div>
+
   <h3>Open questions for PM / Engineering (no silent defaults)</h3>
   <table>
     <thead><tr><th>Question</th><th>Best guess (needs confirmation)</th></tr></thead>
@@ -355,6 +365,7 @@ flowchart LR
       <tr><td><span class="badge light">Light</span></td><td>Quick Check filled (incl. tier)</td><td class="check">✓</td></tr>
       <tr><td><span class="badge light">Light</span></td><td>All 5 use cases captured in the Delta table with before/after state</td><td class="check">✓</td></tr>
       <tr><td><span class="badge light">Light</span></td><td>Gherkin coverage for all 5 use cases</td><td class="check">✓</td></tr>
+      <tr><td><span class="badge light">Light</span></td><td>No-nudge-after-cancellation rule stated and verified (LOGIC-6)</td><td class="check">✓</td></tr>
       <tr><td><span class="badge light">Light</span></td><td>Scope boundary vs. the RT/retrigger spec stated explicitly</td><td class="check">✓</td></tr>
       <tr><td><span class="badge pending">Medium</span></td><td>Use case 3 (Slot day) and use case 4 (fee-paid window) precise timing rules confirmed</td><td class="check">Pending</td></tr>
       <tr><td><span class="badge light">Light</span></td><td>Every A8 row has sign-off received</td><td class="check">Pending</td></tr>
@@ -367,7 +378,7 @@ flowchart LR
   <table>
     <thead><tr><th>Version</th><th>Date</th><th>Author</th><th>Section(s)</th><th>Change &amp; rationale</th><th>Approver</th></tr></thead>
     <tbody>
-      <tr><td>v0.1</td><td>2026-07-14</td><td>Ashish Raj</td><td>All</td><td>Initial draft. Documents 5 required install-flow nudges and adds Push Notification coverage to all 5 (via CleverTap), plus a new Attention Model entry for the one use case (Arrived at Site, no fee paid) that doesn't have one today. Business-requirement level only, by design — no backend implementation detail. Scoped explicitly away from the separate RT/reallocation (retrigger) mechanism. Three open questions left for PM/Engineering rather than assumed: whether all 5 use cases need a new event-send (not just the newer two), the exact timing rule for "not started on Slot day," and whether the fee-paid window resets on CSP progress.</td><td>Pending</td></tr>
+      <tr><td>v0.1</td><td>2026-07-14</td><td>Ashish Raj</td><td>All</td><td>Initial draft. Documents 5 required install-flow nudges and adds Push Notification coverage to all 5 (via CleverTap), plus a new Attention Model entry for the one use case (Arrived at Site, no fee paid) that doesn't have one today. Business-requirement level only, by design — no backend implementation detail. Scoped explicitly away from the separate RT/reallocation (retrigger) mechanism. States and verifies the rule that no nudge fires once a task is cancelled, declined, or failed (LOGIC-6) — already true today, confirmed rather than assumed. Three open questions left for PM/Engineering rather than assumed: whether all 5 use cases need a new event-send (not just the newer two), the exact timing rule for "not started on Slot day," and whether the fee-paid window resets on CSP progress.</td><td>Pending</td></tr>
     </tbody>
   </table>
 </section>
